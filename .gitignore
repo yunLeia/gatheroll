@@ -1,0 +1,19 @@
+# JavaScript
+node_modules/
+.next/
+out/
+*.tsbuildinfo
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+*.egg-info/
+
+# Local configuration
+.env
+.env.local
+.DS_Store
