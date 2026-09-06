@@ -3,33 +3,49 @@
 Updated: 2026-09-06
 
 ## Implemented
-- Next.js create form `/events/new` → FastAPI POST → PostgreSQL commit → `/e/token` GET.
-- One events table, SQLAlchemy 2, psycopg 3, Alembic 0001; no create_all at startup.
-- Timezone-aware validation, secure random share token, typed 404, generic DB 503.
-- Loading/error/retry views, configurable 30-day expires_at (no cleanup yet).
-- Original product brief and accepted slice prompt preserved in docs/product and docs/prompts.
-- AGENTS.md, Codex workflow notes and Korean learning notes provide persistent context.
-- Global Codex context_management.experimental_mode enabled and CLI accepted it.
+- Create Private (default approval_required) or Public (open) unlisted events.
+- POST /events returns {event, manage_token}; public GET never exposes credentials/hashes.
+- Host /manage/share: local 256px QR, invite copy, private recovery link, participant cards.
+- Guest /e/share: name-only join → pending or approved, refresh restoration, rejection view.
+- Server authorization dependencies bind host and participant tokens to their event/role.
+- DB stores only SHA-256 secret verifiers; shared invite identifier remains plaintext.
+- Final decisions are idempotent; opposite decisions return 409; row lock serializes updates.
+- 5-second non-overlapping visible-tab polling with cleanup, stopping on participant final state.
+- Role/event localStorage isolated in lib/credentials.ts; blocked-storage warning and memory fallback.
+- Creation navigates to a clean host URL. Saved capability links use a fragment which is
+  removed from browser history and Next router state on opening.
+- 0002 migration adds policies/host verifier and participants without resetting data.
+- ADR 003, Korean learning note 002, mobile test checklist and updated README.
 
-## Validation
-- PostgreSQL 17 installed locally, manual server on port 5432.
-- Separate gatheroll and gatheroll_test databases; initial migration applied to both.
-- PostgreSQL API suite: 11 passed; two upstream TestClient deprecation warnings.
+## Verified
+- 2 pre-existing development events survived migration unchanged except new defaults;
+  no management credential can be reclaimed for these legacy rows.
 - Alembic check: no model/schema drift.
-- Web lint/typecheck and backend Ruff/mypy passed.
-- Production Next.js build passed; browser form submission → public event page → reload passed.
-- A synthetic “Gatheroll local smoke test” event remains in the local development DB.
-- GitHub CI / final build result: see latest run and final handoff; do not assume success.
+- PostgreSQL API suite: 26 passed; 2 upstream TestClient deprecation warnings.
+- Frontend credential tests: 6 passed. Backend Ruff/mypy and web lint/typecheck passed.
+- Final web lint/typecheck, 6 credential tests and production Next.js build passed
+  after the URL/diagnostic refinements.
+- In-app browser separate tabs: Private pending → approval, Public immediate entry,
+  rejection, pending/rejected reload restoration, clean host URL creation/reload.
+- 375px host / 390px participant / 430px host had no horizontal overflow in measured views.
+- Synthetic browser test events/participants remain in local development DB.
+- Check GitHub Actions for the run matching the current commit; local results above
+  are separate from remote CI evidence.
 
-## Limits / follow-up
-- No photos, participants, QR, auth, manage token, AI, R2 or deployment yet.
-- Public creation is suitable for local development; rate limits/abuse controls needed before public launch.
-- Share URLs grant read access to anyone holding them; tokens should not be published in logs.
-- No idempotency on POST; response loss followed by manual retry can duplicate events.
-- Event timezone is not stored separately; UI uses viewer-local time.
-- Docker/Compose not executed locally because Docker is unavailable.
-- Python dependencies have version ranges, not a fully reproducible transitive lock yet.
+## Outstanding acceptance / limits
+- Physical phone QR scanning and native mobile Safari behavior NOT verified. See
+  docs/testing/002-mobile-access.md for same-Wi-Fi setup and acceptance checklist.
+- Browser tool only exposes one profile, so tests used role-separated tabs, not isolated devices.
+- Intermittent browser network TypeErrors occurred during development; API health/event
+  requests returned 200 and retry recovered. Underlying cause not established.
+- Clipboard button success shown, but tool clipboard readback was unavailable.
+- No photos/uploads, AI, R2, accounts, host editing, token rotation/recovery, pagination,
+  abuse/rate limits, expiry enforcement or deployment added.
+- Lost localStorage loses identity; XSS can steal tokens. No POST idempotency keys.
+- Legacy events with NULL manage_token_hash remain readable but unmanageable.
+- Docker is still unavailable locally. Python dependencies remain version ranges.
 
-## Next proposed slice (requires a new request)
-Design guest identity/authorization, then display-name join and returning-browser recognition.
-Keep uploads and AI separate. Preserve the original brief’s precision-first privacy principle.
+## Next step
+First finish the physical QR acceptance check. Then decide the private upload lifecycle
+ADR before a bounded approved-participant → photo picker → thumbnail slice.
+Do not implement that next slice without a new user request.

@@ -3,7 +3,8 @@
 Read `docs/STATUS.md` at the start of each task. Read only the product/spec/ADR
 sections relevant to the task; the full source brief is `docs/product/original-brief.md`.
 The brief is product direction, not permission to implement every future feature.
-Later explicit user instructions take precedence (for example, no manage token in slice 1).
+Later explicit user instructions take precedence. Approved slice prompts live in docs/prompts;
+use docs/STATUS.md to distinguish current behavior from older slice constraints.
 
 ## Product invariants
 - Gatheroll means gather + camera roll: reduce coordination after group events.

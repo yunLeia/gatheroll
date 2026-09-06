@@ -1,12 +1,16 @@
-from fastapi import FastAPI
+from collections.abc import Awaitable, Callable
+
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from sqlalchemy.exc import SQLAlchemyError
 from starlette.requests import Request
+from starlette.responses import Response
 
 from gatheroll_api.config import get_settings
 from gatheroll_api.events import router
+from gatheroll_api.participants import router as participants_router
 
 
 class HealthResponse(BaseModel):
@@ -23,10 +27,25 @@ def create_app() -> FastAPI:
         CORSMiddleware,
         allow_origins=[settings.web_origin],
         allow_credentials=False,
-        allow_methods=["GET", "POST"],
+        allow_methods=["GET", "POST", "PATCH"],
         allow_headers=["*"],
     )
     app.include_router(router)
+    app.include_router(participants_router)
+
+    @app.middleware("http")
+    async def protect_responses(
+        request: Request,
+        call_next: Callable[[Request], Awaitable[Response]],
+    ) -> Response:
+        response = await call_next(request)
+        response.headers["Cache-Control"] = "no-store"
+        response.headers["Referrer-Policy"] = "no-referrer"
+        return response
+
+    @app.exception_handler(HTTPException)
+    async def domain_error(request: Request, exc: HTTPException) -> JSONResponse:
+        return JSONResponse(status_code=exc.status_code, content=exc.detail)
 
     @app.exception_handler(SQLAlchemyError)
     async def database_error(request: Request, exc: SQLAlchemyError) -> JSONResponse:

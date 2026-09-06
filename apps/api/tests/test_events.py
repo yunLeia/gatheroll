@@ -1,33 +1,7 @@
-import os
-from collections.abc import Iterator
 from datetime import datetime, timedelta
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
-from sqlalchemy.orm import Session
-
-from gatheroll_api.database import get_session, postgres_url
-from gatheroll_api.main import app
-
-
-@pytest.fixture
-def client() -> Iterator[TestClient]:
-    url = os.environ.get("TEST_DATABASE_URL")
-    if not url:
-        pytest.fail("Set TEST_DATABASE_URL to a migrated, dedicated PostgreSQL test DB")
-    engine = create_engine(postgres_url(url))
-    with engine.connect() as connection:
-        transaction = connection.begin()
-        with Session(connection, join_transaction_mode="create_savepoint") as session:
-            app.dependency_overrides[get_session] = lambda: session
-            try:
-                with TestClient(app) as test_client:
-                    yield test_client
-            finally:
-                app.dependency_overrides.clear()
-        transaction.rollback()
-    engine.dispose()
 
 
 def payload() -> dict[str, str]:
@@ -42,7 +16,7 @@ def payload() -> dict[str, str]:
 def test_create_and_fetch_persisted_event(client: TestClient) -> None:
     response = client.post("/events", json=payload())
     assert response.status_code == 201
-    data = response.json()
+    data = response.json()["event"]
     assert data["title"] == "Jenny's Birthday"
     assert datetime.fromisoformat(data["expires_at"]) - datetime.fromisoformat(
         data["ends_at"]
@@ -72,7 +46,7 @@ def test_unknown_event(client: TestClient) -> None:
 
 
 def test_tokens_are_unique_and_not_ids(client: TestClient) -> None:
-    events = [client.post("/events", json=payload()).json() for _ in range(12)]
+    events = [client.post("/events", json=payload()).json()["event"] for _ in range(12)]
     tokens = {event["share_token"] for event in events}
     assert len(tokens) == 12
     assert all(len(token) == 43 for token in tokens)
