@@ -224,7 +224,8 @@ create a new event to use host/approval flows. No anonymous claim/recovery endpo
 
 `participants`: UUID id, event_id foreign key (indexed), display_name (1–80 trimmed
 characters; not unique), status, unique participant_token_hash, joined_at,
-nullable approved_at. DB CHECKs enforce valid states and timestamp consistency.
+nullable approved_at, include_selfies (default true), include_screenshots (default false).
+DB CHECKs enforce valid states and timestamp consistency.
 
 ## Roles and access contracts
 
@@ -241,13 +242,14 @@ provide only a display name and receive a separate event-scoped credential.
 | GET /events/{share}/participants/me | Participant Bearer token | Own current state only |
 | GET /events/{share}/participants | Host Bearer token | Participant list, no credentials/hashes |
 | PATCH /events/{share}/participants/{id} | Host Bearer token | `{status: "approved" or "rejected"}` decision |
+| PATCH /events/{share}/participants/me/preferences | Participant Bearer token | Updated own `{include_selfies, include_screenshots}` |
 
 Missing/malformed credentials return 401, wrong role/event credentials return 403,
 unknown resources return 404, conflicting final decisions return 409. Validation
 returns 422. No client-supplied approval field is accepted at join time.
 Join input is `{ "display_name": "Leia" }`; the server derives status from the
-event policy. Normal participant responses contain id, display_name, status,
-joined_at and approved_at only.
+event policy. Participant responses include id, display_name, status, joined_at,
+approved_at, include_selfies, and include_screenshots.
 
 ```text
 Private: join → pending ─┬→ approved (approved_at set)
@@ -309,7 +311,9 @@ The picker does not scan the whole camera roll. Selection does not start upload;
 the participant explicitly confirms **Upload privately**. Originals may include
 unrelated images and EXIF/location data. Uploaded is not shared: neither other
 participants nor the host can list these private photos. Sharing needs a later
-explicit user-confirmed workflow.
+explicit user-confirmed workflow. Participants can set preferences (include_selfies,
+include_screenshots) before upload, but these are stored and not yet enforced by
+any automatic filtering or removal of uploaded photos.
 
 Configure `apps/api/.env` using the separate `.env.example`, install updated API
 dependencies and apply migration 0003. Use private `gatheroll-dev` R2 credentials;
@@ -370,6 +374,7 @@ GitHub Actions runs the same checks for pushes to `main` and pull requests.
 - [ADR 002: Event persistence](docs/adr/002-event-persistence.md)
 - [ADR 003: Event access and no-account authorization](docs/adr/003-event-access-and-no-account-authorization.md)
 - [ADR 004: Private photo intake lifecycle](docs/adr/004-private-photo-intake-lifecycle.md)
+- [ADR 006: Participant-scoped upload preferences](docs/adr/006-participant-scoped-upload-preferences.md)
 
 ## Intentionally not built yet
 

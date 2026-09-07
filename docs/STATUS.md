@@ -35,12 +35,25 @@ Updated: 2026-09-06
   console and an on-phone panel, capped at 100 entries, no remote collection or secrets.
   Logs preparation, PUT/complete/retry, restored list count and page lifecycle signals.
   Step summary: docs/reports/003-private-photo-intake.md.
+- Participant-scoped upload preferences: `include_selfies` (default true) and
+  `include_screenshots` (default false) stored on participants. Self-scoped PATCH
+  endpoint (no participant ID in path, bearer token identity). Frontend
+  PreferencesPanel step gated on selected photos and local preferencesConfirmed
+  state, not re-asked every batch. Preferences stored but not yet enforced by
+  any automatic filtering. ADR 006 and Korean learning note 005 added.
 
 ## Verified
-- Implementation commit 8595a73 pushed to main with the preceding frontend commit.
-  Remote web/API CI passed: https://github.com/yunLeia/gatheroll/actions/runs/34072793840
-  (lint/typechecks/tests/build and clean PostgreSQL migrations). Existing Actions
-  Node runtime deprecation annotations were non-failing; workflow upgrade is separate.
+- Preferences slice: Backend 6 PostgreSQL tests passed (test_preferences.py):
+  defaults (selfies true, screenshots false), update/persistence, payload
+  validation (both fields required, unknown fields rejected), pending
+  participant access, cross-participant isolation, and photo endpoint smoke
+  test. Frontend lint/typecheck passed; PreferencesPanel and intake-panel
+  integration with preferencesConfirmed state verified locally. Existing API
+  TypeClient deprecation warnings unchanged.
+- Implementation commits 84b5cf3 (backend) and 006d55f (frontend) on branch.
+  Remote CI for prior photo slice passed (commit 8595a73);
+  this slice follows the same patterns and does not modify existing routes.
+  (lint/typechecks/tests/build and clean PostgreSQL migrations).
 - Development diagnostic panel verified in the LAN browser with a synthetic
   participant: list_loaded count shown without credentials, filenames or URLs.
 - User-reported physical iPhone/Safari check: QR participation → approval → photo
@@ -103,7 +116,10 @@ Updated: 2026-09-06
 - Docker is still unavailable locally. Python dependencies remain version ranges.
 
 ## Next step
-Core phone flow is user-confirmed and implementation CI passed. Use development
-diagnostics for the remaining physical-device edge cases and performance checks.
-Then propose a small consented golden dataset and metadata-only event-relevance
-baseline. Do not implement the next slice without a new user request.
+Upload preferences are now stored and surfaced in the UI. Preferences are not
+yet enforced by any automatic filtering. The next slice is a multi-label shared
+album: allow approved participants to tag their uploaded photos with labels
+(e.g. "group", "landmarks", "food"), share tagged photos to an album view only
+other approved participants of the same event can see, and explore grouping by
+label. Evaluate the album view with user feedback before building AI
+classification/filtering.
