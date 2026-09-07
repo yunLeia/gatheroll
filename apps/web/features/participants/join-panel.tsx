@@ -8,6 +8,8 @@ import {
   saveCredential,
 } from "@/lib/credentials";
 import { usePolling } from "@/lib/use-polling";
+import { Field } from "@/components/ui/field";
+import { Button } from "@/components/ui/button";
 
 export function JoinPanel({ event }: { event: EventInfo }) {
   const share = event.share_token;
@@ -85,50 +87,54 @@ export function JoinPanel({ event }: { event: EventInfo }) {
   }
 
   return (
-    <section className="join-panel" aria-live="polite">
-      {!restored && <p>Checking this browser…</p>}
+    <section className="mt-8 border-t border-border pt-7" aria-live="polite">
+      {!restored && (
+        <p className="text-muted-foreground">Checking this browser…</p>
+      )}
       {restored && !token && (
         <>
-          <h2>
+          <h2 className="text-xl font-semibold tracking-tight">
             {event.join_policy === "open"
               ? "Come on in."
               : "Join this gathering."}
           </h2>
-          <p>
+          <p className="mt-3 text-muted-foreground">
             {event.join_policy === "open"
               ? "Anyone with this QR or link can join instantly."
               : "Send a request. Your host will let you in."}
           </p>
-          <form onSubmit={join} className="event-form">
-            <label>
-              Your name
-              <input
-                name="name"
-                autoComplete="given-name"
-                maxLength={80}
-                required
-              />
-            </label>
-            <div className="bottom-action">
-              <button type="submit" disabled={busy}>
+          <form onSubmit={join} className="mt-6 grid gap-6">
+            <Field
+              label="Your name"
+              name="name"
+              autoComplete="given-name"
+              maxLength={80}
+              required
+            />
+            <div className="sticky bottom-0 bg-background pt-2 pb-[max(12px,env(safe-area-inset-bottom))]">
+              <Button size="lg" type="submit" disabled={busy}>
                 {busy ? "Sending…" : "Join Gatheroll"}
-              </button>
+              </Button>
             </div>
           </form>
-          <p className="muted">Just your name. No account needed.</p>
+          <p className="mt-3 text-sm text-faint">
+            Just your name. No account needed.
+          </p>
         </>
       )}
-      {token && !participant && !invalid && <p>Checking your request…</p>}
+      {token && !participant && !invalid && (
+        <p className="text-muted-foreground">Checking your request…</p>
+      )}
       {participant && !invalid && (
         <>
-          <h2>
+          <h2 className="text-xl font-semibold tracking-tight">
             {participant.status === "pending"
               ? "Request sent"
               : participant.status === "approved"
                 ? "You’re in."
                 : "Your request wasn’t approved."}
           </h2>
-          <p>
+          <p className="mt-3 text-muted-foreground">
             {participant.status === "pending"
               ? "Waiting for the host to let you in…"
               : participant.status === "approved"
@@ -138,15 +144,20 @@ export function JoinPanel({ event }: { event: EventInfo }) {
         </>
       )}
       {!persistent && (
-        <p role="status">
+        <p role="status" className="mt-4 text-sm text-caution">
           This browser can’t save your access. Keep this tab open; refreshing
           may lose your request.
         </p>
       )}
-      {error && <p role="alert">{error}</p>}
+      {error && (
+        <p role="alert" className="mt-4 text-sm text-negative">
+          {error}
+        </p>
+      )}
       {invalid && (
-        <button
-          className="secondary"
+        <Button
+          variant="secondary"
+          className="mt-4 w-fit"
           onClick={() => {
             forgetCredential("participant", share);
             setToken(null);
@@ -156,7 +167,7 @@ export function JoinPanel({ event }: { event: EventInfo }) {
           }}
         >
           Clear saved access
-        </button>
+        </Button>
       )}
     </section>
   );

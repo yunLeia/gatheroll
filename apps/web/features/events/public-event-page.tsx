@@ -1,10 +1,11 @@
 "use client";
 
-import Link from "next/link";
 import { useEffect, useState } from "react";
 import { api, ApiError, type EventInfo } from "@/lib/api";
 import { EventHeader } from "./event-header";
 import { JoinPanel } from "@/features/participants/join-panel";
+import { PageHeader } from "@/components/ui/page-header";
+import { Button } from "@/components/ui/button";
 
 export function PublicEventPage({ share }: { share: string }) {
   const [event, setEvent] = useState<EventInfo | null>(null);
@@ -31,19 +32,27 @@ export function PublicEventPage({ share }: { share: string }) {
     return () => controller.abort();
   }, [share, retry]);
   return (
-    <main className="event-shell">
-      <Link className="back-link" href="/">
-        ← Gatheroll
-      </Link>
+    <main className="mx-auto min-h-svh max-w-xl px-5 pt-6 pb-8 sm:px-8">
+      <PageHeader />
       {error && (
-        <>
-          <p role="alert">{error}</p>
-          <button className="secondary" onClick={() => setRetry((n) => n + 1)}>
+        <div className="mt-6 grid gap-3">
+          <p role="alert" className="text-negative">
+            {error}
+          </p>
+          <Button
+            variant="secondary"
+            onClick={() => setRetry((n) => n + 1)}
+            className="w-fit"
+          >
             Try again
-          </button>
-        </>
+          </Button>
+        </div>
       )}
-      {!event && !error && <p role="status">Loading your event…</p>}
+      {!event && !error && (
+        <p role="status" className="mt-6 text-muted-foreground">
+          Loading your event…
+        </p>
+      )}
       {event && (
         <>
           <EventHeader event={event} />

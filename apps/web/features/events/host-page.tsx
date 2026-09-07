@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { QRCodeSVG } from "qrcode.react";
@@ -8,6 +7,9 @@ import { api, ApiError, type EventInfo } from "@/lib/api";
 import { inviteLink, managePath, restoreHost } from "@/lib/credentials";
 import { EventHeader } from "./event-header";
 import { HostParticipants } from "@/features/participants/host-participants";
+import { PageHeader } from "@/components/ui/page-header";
+import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 
 export function HostPage({ share }: { share: string }) {
   const router = useRouter();
@@ -77,75 +79,103 @@ export function HostPage({ share }: { share: string }) {
   }
 
   return (
-    <main className="event-shell">
-      <Link className="back-link" href="/">
-        ← Gatheroll
-      </Link>
+    <main className="mx-auto min-h-svh max-w-xl px-5 pt-6 pb-8 sm:px-8">
+      <PageHeader />
       {error && (
-        <>
-          <p role="alert">{error}</p>
+        <div className="mt-6 grid gap-3">
+          <p role="alert" className="text-negative">
+            {error}
+          </p>
           {token && (
-            <button
-              className="secondary"
+            <Button
+              variant="secondary"
+              className="w-fit"
               onClick={() => setRetry((n) => n + 1)}
             >
               Try again
-            </button>
+            </Button>
           )}
-        </>
+        </div>
       )}
-      {!event && !error && <p role="status">Opening your event…</p>}
+      {!event && !error && (
+        <p role="status" className="mt-6 text-muted-foreground">
+          Opening your event…
+        </p>
+      )}
       {event && token && (
         <>
-          <p className="host-label">Your host space</p>
+          <p className="mt-6 text-xs font-semibold tracking-[0.08em] text-muted-foreground uppercase">
+            Your host space
+          </p>
           <EventHeader event={event} />
-          <section className="invite-card">
+          <Card className="my-7 text-center">
             <QRCodeSVG
               value={invite}
               size={256}
               level="M"
               marginSize={4}
               title="Scan to join this event"
+              className="mx-auto mb-5 h-auto w-full max-w-64 rounded-md"
+              bgColor="#151515"
+              fgColor="#f4f3ef"
             />
-            <h2>Scan to join</h2>
-            <p>
+            <h2 className="text-lg font-semibold tracking-tight">
+              Scan to join
+            </h2>
+            <p className="mt-2 text-muted-foreground">
               {event.join_policy === "open"
                 ? "Guests join instantly with this link."
                 : "Guests request to join. You approve them below."}
             </p>
-            <button onClick={() => void copy(false)}>Copy invite link</button>
+            <Button
+              className="mt-5 w-full"
+              onClick={() => void copy(false)}
+            >
+              Copy invite link
+            </Button>
             {invite.startsWith("http://localhost:") && (
-              <p className="muted">
-                This local link only opens on this computer. For another phone,
-                open Gatheroll using a reachable address first.
+              <p className="mt-3 text-sm text-faint">
+                This local link only opens on this computer. For another
+                phone, open Gatheroll using a reachable address first.
               </p>
             )}
-          </section>
+          </Card>
           <HostParticipants event={event} token={token} />
-          <section className="host-recovery">
-            <h2>Keep your host access</h2>
-            <p className="muted">
+          <section className="mt-9 border-t border-border pt-7">
+            <h2 className="text-lg font-semibold tracking-tight">
+              Keep your host access
+            </h2>
+            <p className="mt-2 text-sm text-muted-foreground">
               Save your private management link somewhere safe. It lets anyone
               holding it manage this event. Don’t send it to guests.
             </p>
-            <button className="secondary" onClick={() => void copy(true)}>
+            <Button
+              variant="secondary"
+              className="mt-4 w-fit"
+              onClick={() => void copy(true)}
+            >
               Copy private management link
-            </button>
+            </Button>
           </section>
           {!persistent && (
-            <p role="alert">
-              This browser can’t save host access. Save your private management
-              link before closing this tab.
+            <p role="alert" className="mt-4 text-sm text-negative">
+              This browser can’t save host access. Save your private
+              management link before closing this tab.
             </p>
           )}
-          {copied && <p role="status">{copied}</p>}
+          {copied && (
+            <p role="status" className="mt-4 text-sm text-muted-foreground">
+              {copied}
+            </p>
+          )}
           {fallbackLink && (
-            <label className="copy-fallback">
+            <label className="mt-4 grid gap-2 text-sm">
               Link to copy
               <input
                 readOnly
                 value={fallbackLink}
                 onFocus={(e) => e.currentTarget.select()}
+                className="w-full min-w-0 rounded-md border border-border bg-card px-4 py-3 text-foreground"
               />
             </label>
           )}

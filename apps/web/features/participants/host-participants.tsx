@@ -3,6 +3,10 @@
 import { useCallback, useRef, useState } from "react";
 import { api, ApiError, type EventInfo, type Participant } from "@/lib/api";
 import { usePolling } from "@/lib/use-polling";
+import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { EmptyState } from "@/components/ui/empty-state";
+import { StatusBadge } from "@/components/ui/status-badge";
 
 export function HostParticipants({
   event,
@@ -72,48 +76,78 @@ export function HostParticipants({
   }
 
   return (
-    <section className="participant-section">
-      <h2>Participants {people ? `(${people.length})` : ""}</h2>
-      {error && <p role="alert">{error}</p>}
-      {!people && !error && <p role="status">Loading participants…</p>}
-      {people?.length === 0 && (
-        <p className="empty-state">
-          {event.join_policy === "open"
-            ? "No one has joined yet."
-            : "No one has requested to join yet."}
+    <section className="mt-9">
+      <h2 className="text-lg font-semibold tracking-tight">
+        Participants {people ? `(${people.length})` : ""}
+      </h2>
+      {error && (
+        <p role="alert" className="mt-3 text-sm text-negative">
+          {error}
         </p>
       )}
-      <ul className="participant-list">
+      {!people && !error && (
+        <p role="status" className="mt-3 text-muted-foreground">
+          Loading participants…
+        </p>
+      )}
+      {people?.length === 0 && (
+        <EmptyState
+          className="mt-4"
+          title="No one yet."
+          hint={
+            event.join_policy === "open"
+              ? "Share the QR to bring people in."
+              : "Requests will appear here to approve."
+          }
+        />
+      )}
+      <ul className="mt-4 grid gap-3">
         {people?.map((person) => (
-          <li className="participant-card" key={person.id}>
-            <h3>{person.display_name}</h3>
-            <p className="muted">
-              {person.status === "pending"
-                ? "Waiting for approval"
-                : person.status === "approved"
-                  ? event.join_policy === "open"
-                    ? "Joined"
-                    : "Approved"
-                  : "Not approved"}
-            </p>
-            {person.status === "pending" && (
-              <div className="card-actions">
-                <button
-                  disabled={!!busy || denied}
-                  onClick={() => void decide(person, "approved")}
+          <li key={person.id}>
+            <Card className="min-w-0">
+              <h3 className="font-medium">{person.display_name}</h3>
+              <div className="mt-2">
+                <StatusBadge
+                  status={
+                    person.status === "approved" ? "approved" : person.status
+                  }
                 >
-                  Approve<span className="sr-only"> {person.display_name}</span>
-                </button>
-                <button
-                  className="secondary"
-                  disabled={!!busy || denied}
-                  onClick={() => void decide(person, "rejected")}
-                >
-                  Reject<span className="sr-only"> {person.display_name}</span>
-                </button>
+                  {person.status === "pending"
+                    ? "Waiting for approval"
+                    : person.status === "approved"
+                      ? event.join_policy === "open"
+                        ? "Joined"
+                        : "Approved"
+                      : "Not approved"}
+                </StatusBadge>
               </div>
-            )}
-            {busy === person.id && <p role="status">Saving decision…</p>}
+              {person.status === "pending" && (
+                <div className="mt-4 flex flex-wrap gap-3">
+                  <Button
+                    className="flex-1"
+                    disabled={!!busy || denied}
+                    onClick={() => void decide(person, "approved")}
+                  >
+                    Approve
+                    <span className="sr-only"> {person.display_name}</span>
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    className="flex-1"
+                    disabled={!!busy || denied}
+                    onClick={() => void decide(person, "rejected")}
+                  >
+                    Reject
+                    <span className="sr-only"> {person.display_name}</span>
+                  </Button>
+                </div>
+              )}
+              {busy === person.id && (
+                <p role="status" className="mt-3 text-sm text-muted-foreground">
+                  Saving decision…
+                </p>
+              )}
+            </Card>
           </li>
         ))}
       </ul>

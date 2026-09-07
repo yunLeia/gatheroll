@@ -1,10 +1,13 @@
 "use client";
 
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
 import { api, ApiError, type JoinPolicy } from "@/lib/api";
 import { saveCredential } from "@/lib/credentials";
+import { PageHeader } from "@/components/ui/page-header";
+import { Field } from "@/components/ui/field";
+import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/cn";
 
 export default function CreateEventPage() {
   const router = useRouter();
@@ -50,60 +53,81 @@ export default function CreateEventPage() {
   }
 
   return (
-    <main className="event-shell">
-      <Link className="back-link" href="/">
-        ← Gatheroll
-      </Link>
-      <h1 className="event-heading">Bring everyone together.</h1>
-      <p>Create a place for your event.</p>
-      <form className="event-form" onSubmit={submit}>
-        <label>
-          Event name
-          <input name="title" required maxLength={200} autoComplete="off" />
-        </label>
-        <label>
-          Start date and time
-          <input name="start" type="datetime-local" required />
-        </label>
-        <label>
-          End date and time
-          <input name="end" type="datetime-local" required />
-        </label>
-        <p className="muted">Times use your device’s local time zone.</p>
-        <label>
-          Location (optional)
-          <input name="location" maxLength={300} />
-        </label>
-        <fieldset className="policy-selector">
-          <legend>Who can join?</legend>
-          <label className="policy-option">
-            <input
-              type="radio"
-              name="join_policy"
-              value="approval_required"
-              defaultChecked
-            />
-            <span>
-              <strong>Private</strong>
-              <span>Guests request to join. You approve them first.</span>
-            </span>
-          </label>
-          <label className="policy-option">
-            <input type="radio" name="join_policy" value="open" />
-            <span>
-              <strong>Public</strong>
-              <span>Anyone with this QR or link can join instantly.</span>
-            </span>
-          </label>
-          <p className="muted">
+    <main className="mx-auto min-h-svh max-w-xl px-5 pt-6 pb-8 sm:px-8">
+      <PageHeader />
+      <h1 className="mt-4 font-display text-4xl italic tracking-tight sm:text-5xl">
+        Bring everyone together.
+      </h1>
+      <p className="mt-3 text-muted-foreground">Create a place for your event.</p>
+      <form className="mt-8 grid gap-6" onSubmit={submit}>
+        <Field label="Event name" name="title" required maxLength={200} autoComplete="off" />
+        <Field
+          label="Start date and time"
+          name="start"
+          type="datetime-local"
+          required
+        />
+        <Field
+          label="End date and time"
+          name="end"
+          type="datetime-local"
+          required
+          hint="Times use your device’s local time zone."
+        />
+        <Field label="Location (optional)" name="location" maxLength={300} />
+        <fieldset className="grid gap-3">
+          <legend className="mb-1 text-sm font-medium">Who can join?</legend>
+          {(
+            [
+              {
+                value: "approval_required",
+                title: "Private",
+                desc: "Guests request to join. You approve them first.",
+                defaultChecked: true,
+              },
+              {
+                value: "open",
+                title: "Public",
+                desc: "Anyone with this QR or link can join instantly.",
+                defaultChecked: false,
+              },
+            ] as const
+          ).map((option) => (
+            <label
+              key={option.value}
+              className={cn(
+                "flex cursor-pointer items-start gap-3.5 rounded-md border border-border p-4",
+                "has-checked:border-foreground/60 has-checked:bg-card",
+              )}
+            >
+              <input
+                type="radio"
+                name="join_policy"
+                value={option.value}
+                defaultChecked={option.defaultChecked}
+                className="mt-1 h-[18px] w-[18px] flex-none accent-foreground"
+              />
+              <span className="grid gap-1">
+                <strong className="font-medium">{option.title}</strong>
+                <span className="text-sm text-muted-foreground">
+                  {option.desc}
+                </span>
+              </span>
+            </label>
+          ))}
+          <p className="text-sm text-muted-foreground">
             Both are unlisted. Your event won’t appear in a public directory.
           </p>
         </fieldset>
-        {error && <p role="alert">{error}</p>}
-        <div className="bottom-action">
-          <button disabled={busy} type="submit">
+        {error && (
+          <p role="alert" className="text-sm text-negative">
+            {error}
+          </p>
+        )}
+        <div className="sticky bottom-0 bg-background pt-2 pb-[max(12px,env(safe-area-inset-bottom))]">
+          <Button size="lg" disabled={busy} type="submit">
             {busy ? "Creating…" : "Create event"}
-          </button>
+          </Button>
         </div>
       </form>
     </main>

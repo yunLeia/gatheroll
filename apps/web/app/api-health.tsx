@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { cn } from "@/lib/cn";
 
 type ApiStatus = "checking" | "available" | "unavailable";
 
@@ -35,9 +36,18 @@ export function ApiHealth() {
     unavailable: "API unavailable — start the backend on port 8000",
   }[status];
 
+  const dotColor = {
+    checking: "bg-muted-foreground",
+    available: "bg-positive",
+    unavailable: "bg-negative",
+  }[status];
+
   return (
-    <p className="status" data-status={status} aria-live="polite">
-      <span aria-hidden="true" />
+    <p
+      className="inline-flex items-center gap-2.5 rounded-full border border-border bg-card/60 px-3.5 py-2 text-[13px] text-muted-foreground"
+      aria-live="polite"
+    >
+      <span aria-hidden="true" className={cn("h-2 w-2 rounded-full", dotColor)} />
       {message}
     </p>
   );
