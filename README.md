@@ -38,6 +38,11 @@ Host creates an event
 → approved originals appear in one shared album
 ```
 
+Participants' explicit broad selection is the first relevance filter. Hosts do not
+need precise event boundaries: name, optional date/location, and join policy suffice.
+Future relevance is primarily visual/contextual; time/GPS are weak supporting metadata,
+not ground truth or membership gates. See the [current product model](docs/product/event-relevance.md).
+
 Gatheroll's event detection will be **precision-first**: a false positive can
 expose a private photo, while a false negative is inconvenient but recoverable.
 The system recommends; the person sharing has final control.
@@ -57,7 +62,7 @@ are not implemented:
 - participant pending/approved/rejected states and browser restoration
 - approved participant multi-photo picker, previews and bounded direct-to-R2 uploads
 - private own-photo listing, partial failure/retry, and refresh of confirmed uploads
-- three Alembic migrations and PostgreSQL authorization/state tests
+- four Alembic migrations and PostgreSQL authorization/state tests
 - backend Docker support
 - lint, type-check, test, and CI foundations
 - architectural decision records written as decisions are made
@@ -65,6 +70,18 @@ are not implemented:
 Host and participant authentication use secret capabilities, without accounts.
 No AI, shared album, host access to participant photos, or account login is implemented.
 Originals and thumbnails are private objects, not automatically shared photos.
+
+## Evaluation
+
+Evaluation harness implemented; golden dataset collection in progress.
+The default offline baseline is **all user-selected candidates**; exact event times
+are not required. JSON/CSV metrics and per-photo error reports are available. Earlier
+time/time+GPS experiments and their 20 synthetic examples remain opt-in historical
+comparisons of a rejected primary product assumption, not current architecture or
+real-photo performance claims. No further time-threshold tuning is planned.
+Production still does **not** classify, share, hide or delete photos automatically.
+See the [evaluation guide](eval/README.md), [labeling rules](docs/eval/event-relevance-labeling.md)
+and [baseline report](docs/reports/004-metadata-baseline.md).
 
 ## Architecture
 
@@ -204,19 +221,24 @@ CI provisions its own PostgreSQL database and applies migrations before tests.
 
 ## Event API and schema
 
-`POST /events` accepts title (1–200 nonblank characters), timezone-aware starts_at
-and ends_at (end must be later), optional location_name (300 characters), and
+`POST /events` accepts title (1–200 nonblank characters), optional event_date
+(calendar date YYYY-MM-DD), optional location_name (300 characters), and
 optional latitude [-90, 90] / longitude [-180, 180], and join_policy (`open` or
 `approval_required`, default). It now returns 201 `{ event: EventResponse,
 manage_token: string }`. The credential is returned once, separate from public data.
 `GET /events/{share_token}` returns only EventResponse or
 404 `{ "code": "event_not_found", "message": "This event could not be found." }`.
 Validation errors return 422; database errors return a generic 503.
+The obsolete starts_at/ends_at creation fields now return 422 and are absent from
+public/managed responses. Deploy updated frontend/API together.
 
-The `events` table has id (UUID primary key), title, starts_at, ends_at,
+The `events` table has id (UUID primary key), title, nullable event_date,
+nullable legacy starts_at/ends_at (storage only, not current product requirements),
 nullable location_name/latitude/longitude, unique share_token, created_at,
 expires_at, join_policy, and nullable manage_token_hash. Timestamps use PostgreSQL timestamptz; token uniqueness also supplies
-the lookup index. `GATHEROLL_RETENTION_DAYS` defaults to 30 after the event ends.
+the lookup index. `GATHEROLL_RETENTION_DAYS` defaults to 30 after creation for new events.
+Migration 0004 preserves all old values and does not invent dates from legacy instants.
+It is forward-only to avoid fabricating times on downgrade; see [ADR 005](docs/adr/005-event-boundaries-are-not-membership.md).
 Expiry enforcement/deletion is not implemented yet. Migration 0002 preserves old
 events and defaults them to Private. Their manage_token_hash stays NULL because no
 host credential was issued in slice 1. They remain readable but cannot be managed;

@@ -104,6 +104,23 @@ PUT은 서버 key·타입·정확한 길이를 서명한다. GET은 썸네일만
 
 ## 다음 단계
 
+### 2026-09-06 metadata evaluation 작업 중 후속 확인
+
+- `photos.test.mjs`에 3개 중 정확히 1개 original PUT을 강제로 실패시키는 테스트 추가.
+  첫 실행 uploaded/failed/uploaded, 재실행은 실패한 ID만 초기화하고 해당 PUT만 추가한다.
+  테스트 서비스 주입으로 제어하며 production UI/고의 네트워크 장애 기능은 넣지 않았다.
+  실행 명령: `npm --prefix apps/web test` (controlled one-original-PUT test).
+  실제 iPhone/R2 네트워크 실패 테스트를 대신했다고 주장하지 않는다.
+- 실기기 HEIC/HEIF의 picker MIME, preview, 원본 성공은 이번에 측정하지 못했다.
+  의도적으로 제공된 실제 HEIC 및 직접 조작 가능한 iPhone 세션이 없기 때문이다.
+  기존 핵심 흐름 사용자 확인은 유효하나 파일 포맷 호환성 증명은 아니다.
+- 기존 측정 유지: desktop 합성 4032×3024 PNG 10개 준비 1128ms, 하나 제거 후
+  9개 업로드 7.3초, 원본+thumbnail 총 17,160,678 bytes. 이번 새 측정이 아니며
+  10개 실제 카메라 사진 업로드/폰 jank·메모리 수치는 아직 없다.
+- 다음 실기기 측정은 진단 패널의 prepare_batch/upload elapsed + type을 기록하고,
+  10개 카메라 사진의 실제 UI 멈춤 여부를 사람이 관찰해야 한다. 큰 변환 파이프라인이나
+  성능 최적화는 추가하지 않았다.
+
 로그로 남은 실기기 항목을 측정하고, 다음 요청에서 작은 동의 기반 golden
 dataset과 metadata-only event relevance baseline을 설계한다. 지금 AI나 다음
 슬라이스는 구현하지 않았다.

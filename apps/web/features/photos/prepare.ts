@@ -1,4 +1,5 @@
-import { capturedAt, contentType } from "./selection";
+import { contentType } from "./selection";
+import { extractMetadata } from "./metadata";
 import type { PhotoJob, PhotoMetadata } from "./types";
 
 export const THUMBNAIL_LONG_SIDE = 384;
@@ -13,48 +14,6 @@ function clientId(): string {
     "",
   );
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
-}
-
-async function metadata(file: File): Promise<PhotoMetadata> {
-  const result: PhotoMetadata = {
-    captured_at: null,
-    latitude: null,
-    longitude: null,
-    width: null,
-    height: null,
-  };
-  try {
-    const { default: exifr } = await import("exifr");
-    const values = (await exifr.parse(file, {
-      pick: [
-        "DateTimeOriginal",
-        "OffsetTimeOriginal",
-        "GPSLatitude",
-        "GPSLatitudeRef",
-        "GPSLongitude",
-        "GPSLongitudeRef",
-        "ExifImageWidth",
-        "ExifImageHeight",
-      ],
-      reviveValues: false,
-    })) as Record<string, unknown> | undefined;
-    if (!values) return result;
-    result.captured_at = capturedAt(
-      values.DateTimeOriginal,
-      values.OffsetTimeOriginal,
-    );
-    const number = (v: unknown, min: number, max: number) =>
-      typeof v === "number" && Number.isFinite(v) && v >= min && v <= max
-        ? v
-        : null;
-    result.latitude = number(values.latitude, -90, 90);
-    result.longitude = number(values.longitude, -180, 180);
-    result.width = number(values.ExifImageWidth, 1, 100000);
-    result.height = number(values.ExifImageHeight, 1, 100000);
-  } catch {
-    /* Missing/unsupported EXIF must not reject the original. */
-  }
-  return result;
 }
 
 async function thumbnail(
@@ -101,7 +60,7 @@ export async function preparePhoto(
   file: File,
   maxThumbnailBytes: number,
 ): Promise<PhotoJob> {
-  const meta = await metadata(file);
+  const meta = await extractMetadata(file);
   const thumb = await thumbnail(file, meta, maxThumbnailBytes);
   return {
     input: {

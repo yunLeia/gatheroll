@@ -1,8 +1,27 @@
 # Gatheroll status
 
-Updated: 2026-09-06
+Updated: 2026-09-07
 
 ## Implemented
+- Product correction (ADR 005): participant selection is the first relevance filter;
+  exact host boundaries are not membership criteria. Time/GPS are weak context only.
+- Create/API/header: name, optional event_date/location, join policy. Retired starts_at/
+  ends_at inputs rejected; no exact times in current responses/UI. Calendar date does
+  not shift with viewer timezone. Old DB timestamps retained as nullable context.
+- Migration 0004 preserves old rows, adds nullable DATE, drops time-order check. New
+  expires_at bookkeeping uses creation+retention_days; no expiry enforcement/cleanup.
+- Evaluation now defaults to all user-selected candidates; event ID needs no time/GPS.
+  Old metadata experiments remain opt-in historical comparisons, not current architecture.
+  Labeling v2, product reference audit, ADR/learning/report 005 and supersession notices added.
+- Offline event-relevance evaluator: three deterministic baselines, versioned config,
+  development-only threshold sweep, JSON/CSV outputs and per-photo Markdown errors.
+  Labeling rules in docs/eval; schema/collection/run guide in eval/README.md.
+- Shared browser/eval exifr extraction in features/photos/metadata.ts; timestamp semantics
+  unchanged. No production classification, AI fields, migration, sharing or new dependency.
+- Private eval_data/ originals/manifests/results ignored; public synthetic 20-row regression
+  fixture committed-ready. Real golden collection is pending (0 real photos supplied/evaluated).
+- Korean R2/eval learning notes and docs/reports/004-metadata-baseline.md document measured
+  synthetic results, privacy boundaries, error hypotheses and remaining verification limits.
 - Create Private (default approval_required) or Public (open) unlisted events.
 - POST /events returns {event, manage_token}; public GET never exposes credentials/hashes.
 - Host /manage/share: local 256px QR, invite copy, private recovery link, participant cards.
@@ -37,6 +56,31 @@ Updated: 2026-09-06
   Step summary: docs/reports/003-private-photo-intake.md.
 
 ## Verified
+- Current correction: web lint/typecheck/**32 tests**/production build and backend
+  Ruff/mypy/**61 PostgreSQL tests** passed. Local dev/test Alembic check: no drift.
+- Migration 0004 applied locally: all pre-existing values of **10 events, 6 participants,
+  10 photos** preserved; no image objects read. Disposable test-schema 0003→0004 also
+  verifies legacy linked rows and new events without timestamps. No data reset.
+- All-selected-only CLI run generated ignored eval_data/candidates-v2-run. No further
+  time sweep or real-photo evaluation. Previous 004 metrics below are historical evidence.
+- Browser shows simplified optional-date form. Full submission unverified due runtime
+  LAN mismatch: Next shell override API=192.168.1.185:8000 and API Origin=.185:3000, but
+  current Mac en0=172.16.29.99. Next is correctly on 0.0.0.0:3000. No network config changed.
+  See docs/reports/005-event-context-correction.md. No commit/push/current remote CI run.
+- Current offline-eval working tree: web lint/typecheck, **30 Node tests** (13 new),
+  default production build; backend Ruff/mypy and **52 dedicated PostgreSQL tests** passed.
+  No new remote CI run: changes have not been committed/pushed in this task.
+- Synthetic-only evaluation: 20 rows (10 belongs, 8 unrelated, 2 ambiguous), 1 development
+  event; three baselines and 9×2 threshold candidates generated. Time+GPS TP=6 FP=4 FN=4,
+  precision/recall=60%, FPR=50%, review=35%; NOT measured real-photo/product performance.
+- Forced single original PUT failure automated: 3 jobs, peers finish, only failed ID/PUT
+  retried. Physical Safari/R2 failure remains unverified; no production failure switch added.
+- Shared exifr verified using synthetic JPEG EXIF bytes; no real HEIC compatibility claim.
+- Current build initially hit restricted helper-port error cached by Turbopack; generated
+  .next/cache/turbopack preserved in /private/tmp/gatheroll-eval-build.8jM8TT before authorized
+  rebuild passed. No .env/source/user data removed; temporary cache backup remains recoverable.
+- R2 GetBucketCors read returned AccessDenied with current key. Learning note distinguishes
+  known localhost/LAN success from intended CORS example; full live policy not independently read.
 - Implementation commit 8595a73 pushed to main with the preceding frontend commit.
   Remote web/API CI passed: https://github.com/yunLeia/gatheroll/actions/runs/34072793840
   (lint/typechecks/tests/build and clean PostgreSQL migrations). Existing Actions
@@ -83,6 +127,11 @@ Updated: 2026-09-06
   are separate from remote CI evidence.
 
 ## Outstanding acceptance / limits
+- Real golden dataset not collected: next evaluation needs intentionally supplied local
+  photos and human labels. Synthetic cases demonstrate logical limitations, not prevalence
+  or visual-embedding benefit. No threshold chosen as safe for production.
+- Full current R2 CORS JSON needs dashboard comparison/export by user; permissions were not
+  broadened. No fresh phone HEIC/10-camera-photo/jank measurement; prior evidence preserved.
 - Core iPhone/Safari flow is user-confirmed. Exact model/version, HEIC behavior,
   physical-device failure/retry and background/eviction tests remain unverified.
   See docs/testing/003-private-photo-intake.md for the remaining checklist.
@@ -103,7 +152,9 @@ Updated: 2026-09-06
 - Docker is still unavailable locally. Python dependencies remain version ranges.
 
 ## Next step
-Core phone flow is user-confirmed and implementation CI passed. Use development
-diagnostics for the remaining physical-device edge cases and performance checks.
-Then propose a small consented golden dataset and metadata-only event-relevance
-baseline. Do not implement the next slice without a new user request.
+Align development LAN URLs/origins with the current IP before phone recheck (currently
+172.16.29.99; do not assume it stays fixed). Then collect/label intentionally selected
+real batches by human gathering context and evaluate all-selected. Do not tune historical
+time/GPS membership thresholds further or integrate them into production. Only later
+consider visual/context improvement over participant selection, with privacy confirmation.
+Commit/push/remote CI require a follow-up request; uploaded samples are not automatically eval data.

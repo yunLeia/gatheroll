@@ -8,6 +8,9 @@
     "start": "next start",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
+    "eval:build": "tsc -p tsconfig.eval.json",
+    "eval": "npm run eval:build && node .eval-build/evaluation/cli.js",
+    "pretest": "npm run eval:build",
     "test": "node --test tests/*.test.mjs"
   },
   "dependencies": {

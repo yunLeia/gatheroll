@@ -1,0 +1,325 @@
+{
+  "schema_version": 1,
+  "dataset_version": "synthetic-v1",
+  "kind": "synthetic",
+  "events": [
+    {
+      "event_id": "event_a",
+      "starts_at": "2026-08-01T12:00:00Z",
+      "ends_at": "2026-08-01T13:00:00Z",
+      "latitude": 0,
+      "longitude": 0
+    }
+  ],
+  "examples": [
+    {
+      "photo_id": "inside",
+      "event_id": "event_a",
+      "label": "belongs",
+      "notes": "Synthetic event activity",
+      "tags": [
+        "outdoor",
+        "day",
+        "JPEG"
+      ],
+      "split": "development",
+      "metadata": {
+        "captured_at": "2026-08-01T12:30:00Z",
+        "latitude": 0,
+        "longitude": 0
+      }
+    },
+    {
+      "photo_id": "food",
+      "event_id": "event_a",
+      "label": "belongs",
+      "notes": "Synthetic meal is confirmed event activity",
+      "tags": [
+        "food",
+        "indoor",
+        "missing_gps"
+      ],
+      "split": "development",
+      "metadata": {
+        "captured_at": "2026-08-01T12:30:00Z",
+        "latitude": null,
+        "longitude": null
+      }
+    },
+    {
+      "photo_id": "burst_a",
+      "event_id": "event_a",
+      "label": "belongs",
+      "notes": "Synthetic same burst",
+      "tags": [
+        "burst"
+      ],
+      "split": "development",
+      "metadata": {
+        "captured_at": "2026-08-01T12:30:01Z",
+        "latitude": 0,
+        "longitude": 0
+      }
+    },
+    {
+      "photo_id": "burst_b",
+      "event_id": "event_a",
+      "label": "belongs",
+      "notes": "Synthetic same burst",
+      "tags": [
+        "burst"
+      ],
+      "split": "development",
+      "metadata": {
+        "captured_at": "2026-08-01T12:30:02Z",
+        "latitude": 0,
+        "longitude": 0
+      }
+    },
+    {
+      "photo_id": "nearby",
+      "event_id": "event_a",
+      "label": "belongs",
+      "notes": "Synthetic nearby activity",
+      "tags": [
+        "outdoor"
+      ],
+      "split": "development",
+      "metadata": {
+        "captured_at": "2026-08-01T12:30:00Z",
+        "latitude": 0,
+        "longitude": 0.002
+      }
+    },
+    {
+      "photo_id": "after_confirmed",
+      "event_id": "event_a",
+      "label": "belongs",
+      "notes": "Synthetic confirmed continuation after formal end",
+      "tags": [
+        "after"
+      ],
+      "split": "development",
+      "metadata": {
+        "captured_at": "2026-08-01T13:15:00Z",
+        "latitude": 0,
+        "longitude": 0
+      }
+    },
+    {
+      "photo_id": "no_time",
+      "event_id": "event_a",
+      "label": "belongs",
+      "notes": "Synthetic label known despite missing EXIF time; not a HEIC file test",
+      "tags": [
+        "missing_time",
+        "HEIC"
+      ],
+      "split": "development",
+      "metadata": {
+        "captured_at": null,
+        "latitude": 0,
+        "longitude": 0
+      }
+    },
+    {
+      "photo_id": "no_metadata",
+      "event_id": "event_a",
+      "label": "belongs",
+      "notes": "Synthetic event context known to labeler only",
+      "tags": [
+        "edited",
+        "missing_time",
+        "missing_gps"
+      ],
+      "split": "development",
+      "metadata": {
+        "captured_at": null,
+        "latitude": null,
+        "longitude": null
+      }
+    },
+    {
+      "photo_id": "wrong_time",
+      "event_id": "event_a",
+      "label": "belongs",
+      "notes": "Synthetic incorrect camera clock",
+      "tags": [
+        "incorrect_metadata"
+      ],
+      "split": "development",
+      "metadata": {
+        "captured_at": "2026-07-31T12:30:00Z",
+        "latitude": null,
+        "longitude": null
+      }
+    },
+    {
+      "photo_id": "before_confirmed",
+      "event_id": "event_a",
+      "label": "belongs",
+      "notes": "Synthetic confirmed setup activity",
+      "tags": [
+        "before"
+      ],
+      "split": "development",
+      "metadata": {
+        "captured_at": "2026-08-01T11:55:00Z",
+        "latitude": null,
+        "longitude": null
+      }
+    },
+    {
+      "photo_id": "other_date",
+      "event_id": "event_a",
+      "label": "does_not_belong",
+      "notes": "Synthetic previous day at same venue",
+      "tags": [
+        "same_location_different_date"
+      ],
+      "split": "development",
+      "metadata": {
+        "captured_at": "2026-07-31T12:30:00Z",
+        "latitude": 0,
+        "longitude": 0
+      }
+    },
+    {
+      "photo_id": "other_group",
+      "event_id": "event_a",
+      "label": "does_not_belong",
+      "notes": "Synthetic unrelated group with identical metadata",
+      "tags": [
+        "same_location_different_group"
+      ],
+      "split": "development",
+      "metadata": {
+        "captured_at": "2026-08-01T12:30:00Z",
+        "latitude": 0,
+        "longitude": 0
+      }
+    },
+    {
+      "photo_id": "screenshot",
+      "event_id": "event_a",
+      "label": "does_not_belong",
+      "notes": "Synthetic adversarial retained timestamp; not typical screenshot EXIF claim",
+      "tags": [
+        "screenshot"
+      ],
+      "split": "development",
+      "metadata": {
+        "captured_at": "2026-08-01T12:30:00Z",
+        "latitude": null,
+        "longitude": null
+      }
+    },
+    {
+      "photo_id": "saved",
+      "event_id": "event_a",
+      "label": "does_not_belong",
+      "notes": "Synthetic unrelated saved file without metadata",
+      "tags": [
+        "downloaded"
+      ],
+      "split": "development",
+      "metadata": {
+        "captured_at": null,
+        "latitude": null,
+        "longitude": null
+      }
+    },
+    {
+      "photo_id": "selfie",
+      "event_id": "event_a",
+      "label": "does_not_belong",
+      "notes": "Synthetic private unrelated activity within time/place",
+      "tags": [
+        "unrelated_selfie"
+      ],
+      "split": "development",
+      "metadata": {
+        "captured_at": "2026-08-01T12:30:00Z",
+        "latitude": 0,
+        "longitude": 0
+      }
+    },
+    {
+      "photo_id": "far",
+      "event_id": "event_a",
+      "label": "does_not_belong",
+      "notes": "Synthetic simultaneous distant activity",
+      "tags": [
+        "different_location"
+      ],
+      "split": "development",
+      "metadata": {
+        "captured_at": "2026-08-01T12:30:00Z",
+        "latitude": 1,
+        "longitude": 1
+      }
+    },
+    {
+      "photo_id": "night_other",
+      "event_id": "event_a",
+      "label": "does_not_belong",
+      "notes": "Synthetic unrelated later activity",
+      "tags": [
+        "night"
+      ],
+      "split": "development",
+      "metadata": {
+        "captured_at": "2026-08-01T23:30:00Z",
+        "latitude": null,
+        "longitude": null
+      }
+    },
+    {
+      "photo_id": "gps_only_other",
+      "event_id": "event_a",
+      "label": "does_not_belong",
+      "notes": "Synthetic no timestamp hides different date",
+      "tags": [
+        "missing_time",
+        "same_location_different_date"
+      ],
+      "split": "development",
+      "metadata": {
+        "captured_at": null,
+        "latitude": 0,
+        "longitude": 0
+      }
+    },
+    {
+      "photo_id": "travel",
+      "event_id": "event_a",
+      "label": "ambiguous",
+      "notes": "Synthetic unclear travel boundary",
+      "tags": [
+        "before",
+        "travel"
+      ],
+      "split": "development",
+      "metadata": {
+        "captured_at": "2026-08-01T11:50:00Z",
+        "latitude": 0,
+        "longitude": 0.005
+      }
+    },
+    {
+      "photo_id": "after_unclear",
+      "event_id": "event_a",
+      "label": "ambiguous",
+      "notes": "Synthetic unclear second gathering",
+      "tags": [
+        "after"
+      ],
+      "split": "development",
+      "metadata": {
+        "captured_at": "2026-08-01T13:05:00Z",
+        "latitude": 0,
+        "longitude": 0
+      }
+    }
+  ]
+}

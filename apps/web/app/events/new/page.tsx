@@ -19,15 +19,8 @@ export default function CreateEventPage() {
     if (busy) return;
     const form = new FormData(event.currentTarget);
     const title = String(form.get("title") ?? "").trim();
-    const start = new Date(String(form.get("start")));
-    const end = new Date(String(form.get("end")));
-    if (
-      !title ||
-      !Number.isFinite(+start) ||
-      !Number.isFinite(+end) ||
-      end <= start
-    ) {
-      setError("Enter an event name and an end time after the start time.");
+    if (!title) {
+      setError("Enter an event name.");
       return;
     }
     setError("");
@@ -35,8 +28,7 @@ export default function CreateEventPage() {
     try {
       const result = await api.create({
         title,
-        starts_at: start.toISOString(),
-        ends_at: end.toISOString(),
+        event_date: String(form.get("event_date") ?? "") || null,
         location_name: String(form.get("location") ?? "").trim() || null,
         join_policy: String(form.get("join_policy")) as JoinPolicy,
       });
@@ -62,17 +54,10 @@ export default function CreateEventPage() {
       <form className="mt-8 grid gap-6" onSubmit={submit}>
         <Field label="Event name" name="title" required maxLength={200} autoComplete="off" />
         <Field
-          label="Start date and time"
-          name="start"
-          type="datetime-local"
-          required
-        />
-        <Field
-          label="End date and time"
-          name="end"
-          type="datetime-local"
-          required
-          hint="Times use your device’s local time zone."
+          label="Date (optional)"
+          name="event_date"
+          type="date"
+          hint="For display only. No exact start or end time needed."
         />
         <Field label="Location (optional)" name="location" maxLength={300} />
         <fieldset className="grid gap-3">

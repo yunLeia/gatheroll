@@ -129,6 +129,31 @@ test("partial failure and retry skip successful photos and successful original P
   assert.equal(state[1].state, "uploaded");
 });
 
+test("controlled one-original-PUT failure leaves peers complete and Retry Failed retries only it", async () => {
+  let state = jobs(3), fail = true;
+  const puts = [], initialized = [];
+  const services = {
+    initialize: async (inputs) => {
+      initialized.push(inputs.map(i => i.client_id));
+      return authorizations(inputs);
+    },
+    put: async (target) => {
+      puts.push(target.url);
+      if (target.url.endsWith("/1") && fail) throw new Error("controlled single PUT failure");
+    },
+    complete: async () => {},
+  };
+  const update = (job) => { state = state.map(j => j.input.client_id === job.input.client_id ? job : j); };
+  await uploadBatch(state, services, new AbortController().signal, update);
+  assert.deepEqual(state.map(j => j.state), ["uploaded", "failed", "uploaded"]);
+  assert.equal(state[1].originalUploaded, false);
+  fail = false;
+  await uploadBatch(state, services, new AbortController().signal, update);
+  assert.deepEqual(initialized, [["0", "1", "2"], ["1"]]);
+  assert.deepEqual(puts, ["https://r2.example/0", "https://r2.example/1", "https://r2.example/2", "https://r2.example/1"]);
+  assert.ok(state.every(j => j.state === "uploaded"));
+});
+
 test("lost initialization response preserves retry identities", async () => {
   let state = jobs(2);
   await uploadBatch(

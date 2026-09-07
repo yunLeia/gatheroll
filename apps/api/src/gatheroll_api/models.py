@@ -1,9 +1,10 @@
-from datetime import datetime
+from datetime import date, datetime
 from uuid import UUID
 
 from sqlalchemy import (
     BigInteger,
     CheckConstraint,
+    Date,
     DateTime,
     Enum,
     ForeignKey,
@@ -22,7 +23,6 @@ class Base(DeclarativeBase):
 class Event(Base):
     __tablename__ = "events"
     __table_args__ = (
-        CheckConstraint("ends_at > starts_at", name="event_time_order"),
         CheckConstraint("length(trim(title)) > 0", name="event_title_not_blank"),
         CheckConstraint("latitude BETWEEN -90 AND 90", name="event_latitude_range"),
         CheckConstraint("longitude BETWEEN -180 AND 180", name="event_longitude_range"),
@@ -30,8 +30,10 @@ class Event(Base):
 
     id: Mapped[UUID] = mapped_column(primary_key=True)
     title: Mapped[str] = mapped_column(String(200))
-    starts_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
-    ends_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    event_date: Mapped[date | None] = mapped_column(Date)
+    # Historical context only; retained without backfill or relevance/auth semantics.
+    starts_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    ends_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     location_name: Mapped[str | None] = mapped_column(String(300))
     latitude: Mapped[float | None]
     longitude: Mapped[float | None]

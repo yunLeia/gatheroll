@@ -1,0 +1,10 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "module": "commonjs", "moduleResolution": "node", "ignoreDeprecations": "6.0",
+    "noEmit": false, "incremental": false, "outDir": ".eval-build", "rootDir": ".",
+    "target": "ES2022", "plugins": []
+  },
+  "include": ["evaluation/**/*.ts"],
+  "exclude": ["node_modules", ".eval-build"]
+}
