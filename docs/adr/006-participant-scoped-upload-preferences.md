@@ -34,9 +34,21 @@ Pending participants may set preferences. This carries no privacy or security
 weight: they control only their own preferences before the host approves them,
 and doing so does not establish any authorization over their uploaded photos.
 
-The frontend gates the preferences step on having photos selected (`selected > 0`)
-and having confirmed preferences at least once (`preferencesConfirmed` local state),
-rather than re-asking every time photos are added to a batch.
+The frontend shows the preferences step while photos are selected (`selected > 0`)
+and preferences have not yet been confirmed this session (`!preferencesConfirmed`
+local state); once confirmed, it switches to the upload button instead, rather than
+re-asking every time photos are added to a batch.
+
+The host-facing `GET /events/{share_token}/participants` list also returns each
+participant's `include_selfies`/`include_screenshots` as part of the widened
+`ParticipantResponse`. This is intended, not an oversight: it is read visibility
+only (the host already sees this response shape for other fields), not the
+admin-scoped override rejected below.
+
+`require_participant` does not branch on participant status, so a rejected
+participant (not just a pending one) can also call the preferences-update
+endpoint. This is safe for the same reason pending access is safe (see
+Alternatives): it grants no authorization over photos or other participants.
 
 ## Alternatives
 
@@ -60,7 +72,7 @@ rather than re-asking every time photos are added to a batch.
   the path. Cross-participant updates are impossible by design.
 - No account ecosystem exists yet. Preferences are tied to the single participant
   bearer token; lost credentials mean lost identity.
-- The frontend preference step can be dismissed if no photos are selected (`selected < 1`),
+- The frontend preference step is not shown when no photos are selected (`selected < 1`),
   avoiding forced configuration steps for participants who do not upload.
 - Defaults are conservative: include selfies by default (opt-out), exclude
   screenshots (opt-in). These can be tuned in future slices with user evidence.

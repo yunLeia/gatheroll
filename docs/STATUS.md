@@ -1,6 +1,6 @@
 # Gatheroll status
 
-Updated: 2026-09-06
+Updated: 2026-09-07
 
 ## Implemented
 - Create Private (default approval_required) or Public (open) unlisted events.
@@ -43,17 +43,25 @@ Updated: 2026-09-06
   any automatic filtering. ADR 006 and Korean learning note 005 added.
 
 ## Verified
+- Implementation commit 8595a73 pushed to main with the preceding frontend commit.
+  Remote web/API CI passed: https://github.com/yunLeia/gatheroll/actions/runs/34072793840
+  (lint/typechecks/tests/build and clean PostgreSQL migrations). Existing Actions
+  Node runtime deprecation annotations were non-failing; workflow upgrade is separate.
 - Preferences slice: Backend 6 PostgreSQL tests passed (test_preferences.py):
   defaults (selfies true, screenshots false), update/persistence, payload
   validation (both fields required, unknown fields rejected), pending
   participant access, cross-participant isolation, and photo endpoint smoke
-  test. Frontend lint/typecheck passed; PreferencesPanel and intake-panel
-  integration with preferencesConfirmed state verified locally. Existing API
-  TypeClient deprecation warnings unchanged.
-- Implementation commits 84b5cf3 (backend) and 006d55f (frontend) on branch.
-  Remote CI for prior photo slice passed (commit 8595a73);
-  this slice follows the same patterns and does not modify existing routes.
-  (lint/typechecks/tests/build and clean PostgreSQL migrations).
+  test. Backend Ruff/mypy passed, and the full 58/58 PostgreSQL test suite
+  passed (52 prior + 6 new), not just the 6 new tests. Frontend lint,
+  typecheck, test, and build were all clean; PreferencesPanel and
+  intake-panel integration with preferencesConfirmed state verified locally.
+  Existing API TestClient deprecation warnings unchanged. Implementation
+  commits 84b5cf3 (backend) and 006d55f (frontend) on branch; this slice
+  follows the same patterns and does not modify existing routes.
+- Migration 0005's chain (0001→0002→0003→0005) was verified to resolve
+  cleanly and `alembic check` reported no drift, using an isolated
+  disposable Postgres schema inside `gatheroll_test` (not the shared
+  dev/test database, which is owned by a concurrent session).
 - Development diagnostic panel verified in the LAN browser with a synthetic
   participant: list_loaded count shown without credentials, filenames or URLs.
 - User-reported physical iPhone/Safari check: QR participation → approval → photo
@@ -114,6 +122,9 @@ Updated: 2026-09-06
   no POST idempotency keys; photo initialization has scoped client UUID idempotency.
 - Legacy events with NULL manage_token_hash remain readable but unmanageable.
 - Docker is still unavailable locally. Python dependencies remain version ranges.
+- Migration 0005 branches from 0003, not 0004: a concurrent, unrelated task in
+  another session already claims revision id "0004" for a different migration.
+  An `alembic merge` will be needed once that migration lands on this branch.
 
 ## Next step
 Upload preferences are now stored and surfaced in the UI. Preferences are not

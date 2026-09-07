@@ -1,5 +1,10 @@
-# apps/api/migrations/versions/0005_participant_preferences.py
-"""Add participant-scoped upload preferences (include_selfies, include_screenshots)."""
+"""Add participant-scoped upload preferences (include_selfies, include_screenshots).
+
+This branches from 0003, not 0004: a concurrent, unrelated task in another session
+already claims revision id "0004" for a different migration. Branching here avoids a
+future duplicate-revision-id collision. Reconcile with `alembic merge` once both land
+on the same branch.
+"""
 
 import sqlalchemy as sa
 from alembic import op

@@ -304,7 +304,12 @@ export function IntakePanel({
       onPreferencesUpdated(updated);
       setPreferencesConfirmed(true);
     } catch {
-      setError("We couldn’t save your preferences. Try again.");
+      // Preferences are supplementary metadata, never a gate on uploading:
+      // still let the participant proceed even though the save failed.
+      setPreferencesConfirmed(true);
+      setError(
+        "We couldn’t save your preferences, but you can still upload. You can try setting them again later.",
+      );
     } finally {
       if (alive.current) setSavingPreferences(false);
     }

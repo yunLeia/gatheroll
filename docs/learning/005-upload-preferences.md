@@ -43,6 +43,11 @@
 자신의 선호도를 알리는 것만으로는 공격 표면이 생기지 않는다. 오히려 호스트가
 나중에 참가자를 승인하면, 그들은 이미 자신의 선호도를 기록해 두었다.
 
+같은 이유로 `security.require_participant`는 참가자의 status를 전혀 검사하지
+않는다. 그래서 host가 거절(rejected)한 참가자도 이 엔드포인트를 계속 호출할 수
+있다. pending과 마찬가지로 안전하다: 상태와 무관하게 이 엔드포인트는 본인의
+선호도 외에 아무 권한도 주지 않는다.
+
 ## 5. 왜 frontend가 매번 선호도를 묻지 않는가?
 
 `intake-panel.tsx`에서 `preferencesConfirmed` 로컬 상태를 추적한다 (68줄).
@@ -79,10 +84,15 @@ AI나 규칙 엔진이 이 컬럼을 읽을 때 처음 의미를 가진다. 지�
 approved_at에 더해 `include_selfies`와 `include_screenshots`를 포함한다.
 `ParticipantPreferencesUpdate` (63–66줄)는 PATCH 입력이며 두 boolean만 받는다.
 
+`ParticipantResponse`가 커졌기 때문에, 호스트가 쓰는
+`GET /events/{share}/participants` (참가자 목록)도 이제 각 참가자의
+선호도 두 필드를 함께 반환한다. 참가자는 자신의 선호도만 바꿀 수 있지만,
+호스트는 (다른 필드와 마찬가지로) 목록에서 읽을 수 있다.
+
 ## 8. 실제 요청 경로
 
 1. `IntakePanel`은 `participant.include_selfies/include_screenshots`를 받는다
-   (프로전 매개변수).
+   (props 파라미터).
 2. 사진 선택 후 처음 `PreferencesPanel`이 표시되고, 사용자가 토글을 조정한다.
 3. "Continue" → `savePreferences(prefs)` → `api.updatePreferences(share, token, prefs)`
    (lib/api.ts 기점).
@@ -107,7 +117,7 @@ participant는 토큰에서만, event는 검증된 토큰의 관계에서만 나
 ## 10. 이후 단계
 
 선호도가 저장된 지금, 다음 작업은:
-- 실기기에서 UI 흐름 재검증 (mobile/004-pref-testing.md, 아직 없음)
+- 실기기에서 UI 흐름 재검증 (docs/testing/ 아래 문서는 아직 없음)
 - 작은 golden dataset과 label 기준으로 event-relevance baseline 만들기
 - 기준에서 `include_selfies/include_screenshots` 신호의 영향 측정
 - 기본값 조정 여부 결정

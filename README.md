@@ -224,8 +224,8 @@ create a new event to use host/approval flows. No anonymous claim/recovery endpo
 
 `participants`: UUID id, event_id foreign key (indexed), display_name (1–80 trimmed
 characters; not unique), status, unique participant_token_hash, joined_at,
-nullable approved_at, include_selfies (default true), include_screenshots (default false).
-DB CHECKs enforce valid states and timestamp consistency.
+nullable approved_at, include_selfies (non-null, default true), include_screenshots
+(non-null, default false). DB CHECKs enforce valid states and timestamp consistency.
 
 ## Roles and access contracts
 
@@ -316,7 +316,8 @@ include_screenshots) before upload, but these are stored and not yet enforced by
 any automatic filtering or removal of uploaded photos.
 
 Configure `apps/api/.env` using the separate `.env.example`, install updated API
-dependencies and apply migration 0003. Use private `gatheroll-dev` R2 credentials;
+dependencies and apply the latest migration (`alembic upgrade head`). Use private
+`gatheroll-dev` R2 credentials;
 never put secrets in `NEXT_PUBLIC_*`. Keep public access disabled and configure
 bucket CORS for the actual browser origin. Restart the API after changing `.env`.
 The [setup guide](docs/testing/003-private-photo-intake.md#real-r2-development-setup-one-provider)
@@ -369,6 +370,8 @@ GitHub Actions runs the same checks for pushes to `main` and pull requests.
 - Record measured results; never fabricate portfolio metrics.
 
 ## Architectural decisions
+
+(ADR 005 is reserved by concurrent work not yet merged into this branch.)
 
 - [ADR 001: Use the web as Gatheroll's universal participation layer](docs/adr/001-web-first.md)
 - [ADR 002: Event persistence](docs/adr/002-event-persistence.md)

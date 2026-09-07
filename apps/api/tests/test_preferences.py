@@ -1,4 +1,3 @@
-# apps/api/tests/test_preferences.py
 from fastapi.testclient import TestClient
 
 # `from tests.test_access import auth, create, join` fails under pytest's
@@ -102,6 +101,23 @@ def test_pending_participant_can_still_set_preferences(client: TestClient) -> No
         headers=auth(token),
     )
     assert response.status_code == 200
+
+
+def test_approved_participant_can_update_own_preferences(client: TestClient) -> None:
+    # The frontend only ever calls this endpoint as an approved participant;
+    # the other tests above exercise the pending path.
+    share, _ = create(client, "open")
+    _, token = join(client, share)
+    response = client.patch(
+        f"/events/{share}/participants/me/preferences",
+        json={"include_selfies": False, "include_screenshots": True},
+        headers=auth(token),
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "approved"
+    assert body["include_selfies"] is False
+    assert body["include_screenshots"] is True
 
 
 def test_one_participant_cannot_update_another_participants_preferences(
