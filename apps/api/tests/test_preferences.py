@@ -9,8 +9,6 @@ from fastapi.testclient import TestClient
 def create(client: TestClient, policy: str | None = None) -> tuple[str, str]:
     data = {
         "title": "Access test",
-        "starts_at": "2026-09-12T19:00:00Z",
-        "ends_at": "2026-09-12T23:00:00Z",
     }
     if policy is not None:
         data["join_policy"] = policy
