@@ -37,6 +37,10 @@ Updated: 2026-09-06
   Step summary: docs/reports/003-private-photo-intake.md.
 
 ## Verified
+- Implementation commit 8595a73 pushed to main with the preceding frontend commit.
+  Remote web/API CI passed: https://github.com/yunLeia/gatheroll/actions/runs/34072793840
+  (lint/typechecks/tests/build and clean PostgreSQL migrations). Existing Actions
+  Node runtime deprecation annotations were non-failing; workflow upgrade is separate.
 - Development diagnostic panel verified in the LAN browser with a synthetic
   participant: list_loaded count shown without credentials, filenames or URLs.
 - User-reported physical iPhone/Safari check: QR participation → approval → photo
@@ -82,8 +86,6 @@ Updated: 2026-09-06
 - Core iPhone/Safari flow is user-confirmed. Exact model/version, HEIC behavior,
   physical-device failure/retry and background/eviction tests remain unverified.
   See docs/testing/003-private-photo-intake.md for the remaining checklist.
-- User authorized committing/pushing this slice including the pre-existing frontend
-  commit. Check the matching GitHub Actions run for remote CI evidence.
 - Unfinished selections are not persisted across reload/eviction; reselect required.
   No automatic cleanup/retention, multipart resume, server decode or checksum validation.
 - Signed PUTs are reusable until expiry and can overwrite matching-type/length bytes.
@@ -101,7 +103,7 @@ Updated: 2026-09-06
 - Docker is still unavailable locally. Python dependencies remain version ranges.
 
 ## Next step
-Core phone flow is user-confirmed. Verify remote CI after the authorized push;
-keep remaining physical-device edge cases and performance checks explicitly open.
+Core phone flow is user-confirmed and implementation CI passed. Use development
+diagnostics for the remaining physical-device edge cases and performance checks.
 Then propose a small consented golden dataset and metadata-only event-relevance
 baseline. Do not implement the next slice without a new user request.

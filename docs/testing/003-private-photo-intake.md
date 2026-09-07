@@ -175,7 +175,8 @@ define a retention period with the user. Current dev objects persist until remov
 - Migration 0003 also applied to confirmed local `gatheroll` development DB; no drift.
 - User subsequently confirmed QR participation through upload and photo retention
   after refresh on iPhone/Safari. Native HEIC behavior, phone throughput, deliberate
-  failure/retry and background eviction remain unverified. Remote CI is not verified.
+  failure/retry and background eviction remain unverified. Implementation commit
+  8595a73 passed remote web/API CI: https://github.com/yunLeia/gatheroll/actions/runs/34072793840
 
 ### LAN troubleshooting observed during the physical check
 
