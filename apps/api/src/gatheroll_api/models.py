@@ -9,6 +9,8 @@ from sqlalchemy import (
     ForeignKey,
     String,
     UniqueConstraint,
+    false,
+    true,
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
@@ -81,6 +83,8 @@ class Participant(Base):
     participant_token_hash: Mapped[str] = mapped_column(String(64), unique=True)
     joined_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    include_selfies: Mapped[bool] = mapped_column(server_default=true())
+    include_screenshots: Mapped[bool] = mapped_column(server_default=false())
     event: Mapped[Event] = relationship(back_populates="participants")
 
 
