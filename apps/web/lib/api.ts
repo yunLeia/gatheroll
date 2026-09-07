@@ -15,6 +15,13 @@ export type Participant = {
   status: ParticipantStatus;
   joined_at: string;
   approved_at: string | null;
+  include_selfies: boolean;
+  include_screenshots: boolean;
+};
+
+export type ParticipantPreferences = {
+  include_selfies: boolean;
+  include_screenshots: boolean;
 };
 export type CreateInput = {
   title: string;
@@ -106,5 +113,14 @@ export const api = {
     request<Participant>(
       `${eventPath(share)}/participants/${encodeURIComponent(id)}`,
       { method: "PATCH", token, body: { status } },
+    ),
+  updatePreferences: (
+    share: string,
+    token: string,
+    prefs: ParticipantPreferences,
+  ) =>
+    request<Participant>(
+      `${eventPath(share)}/participants/me/preferences`,
+      { method: "PATCH", token, body: prefs },
     ),
 };
