@@ -1,7 +1,7 @@
 # Gatheroll 학습 노트: 기반과 첫 이벤트 흐름
 
 ## 먼저 볼 파일
-- `apps/web/app/events/new/page.tsx`: 폼, 로컬 시각 → ISO UTC 변환, POST, 이동
+- `apps/web/app/events/new/page.tsx`: 이름/선택 날짜·장소/정책 폼, POST, 이동
 - `apps/web/app/e/[shareToken]/page.tsx`: 토큰으로 GET, 로딩/404/오류/재시도
 - `apps/api/src/gatheroll_api/events.py`: 입력/출력 계약과 저장 흐름
 - `apps/api/src/gatheroll_api/models.py`: 테이블과 Python 객체의 대응
@@ -16,8 +16,8 @@ ORM 모델 Event의 각 Mapped 필드는 열과 대응한다. 객체가 곧 영�
 직접 SQL을 쓰는 대안도 있지만 현재는 타입과 객체 매핑이 읽기 쉬워 ORM을 선택했다.
 
 ## 세 종류의 스키마
-EventCreate(Pydantic)는 외부 입력을 검증한다: 공백 제목, 시간 역전, 좌표 범위,
-시간대 없는 입력을 거부한다. Event(SQLAlchemy)는 DB 저장 구조다.
+EventCreate(Pydantic)는 외부 입력을 검증한다: 공백 제목, 잘못된 달력 날짜, 좌표 범위,
+폐기된 start/end 필드를 거부한다. 정확한 시간은 필요 없다. Event(SQLAlchemy)는 DB 저장 구조다.
 EventResponse(Pydantic)는 응답으로 공개할 필드를 정한다. 입력자가 id나 토큰을
 고르지 못하게 하고, 향후 내부 필드가 생겨도 실수로 공개하지 않도록 분리했다.
 
@@ -60,7 +60,8 @@ CORS는 브라우저 정책이며 인증이나 서버 접근 통제의 대체물
 - API URL/CORS 오설정: 브라우저 요청 실패. 환경 변수와 origin을 확인한다.
 - 네트워크/응답 지연: 15초 제한과 안내. 생성의 모호한 실패는 중복 위험이 있다.
 - 없는 토큰: 404 안내. 서버 오류와 구분한다.
-- 시간대: 저장은 절대 시각, 화면은 보는 사람의 기기 시간대. 행사 시간대 보존은 미구현.
+- 날짜: event_date는 선택 SQL DATE이며 기기 시간대로 날짜를 이동시키지 않는다.
+  기존 starts_at/ends_at은 0004에서 nullable로 보존하지만 현재 API/UI에는 노출하지 않는다.
 
 ## 기반 기술 복습
 FastAPI는 HTTP 라우팅·검증·OpenAPI 문서를 제공한다. Uvicorn은 HTTP 서버다.
@@ -73,6 +74,6 @@ CI는 별도 Linux 환경에서 lint/typecheck/build/실제 DB 테스트를 반�
 ## 직접 해볼 것
 1. 두 브라우저 탭에서 생성한 URL을 열어 동일 이벤트를 확인한다.
 2. API를 재시작하고 URL을 새로고침한다. DB 저장이 유지되는지 확인한다.
-3. 끝 시간을 앞당겨 API 422와 화면 안내를 확인한다.
+3. 날짜 없이 생성되는지, 잘못된 날짜/폐기된 시간 필드는 API 422인지 확인한다.
 4. GET 응답과 DB events 행을 비교한다.
 5. migration에 열 하나를 추가하는 연습은 별도 브랜치/테스트 DB에서 한다.

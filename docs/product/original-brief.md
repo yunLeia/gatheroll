@@ -1,3 +1,9 @@
+> Historical source brief. On 2026-09-07, required host start/end boundaries and primary
+> time/GPS membership filtering were superseded by [ADR 005](../adr/005-event-boundaries-are-not-membership.md).
+> Use the [current product model](event-relevance.md): participant selection first,
+> visual/contextual relevance hypothesis, weak optional metadata. The original text below
+> is preserved as provenance, not authorization to reinstate obsolete requirements.
+
 You are helping me build a production-quality portfolio project called **Gatheroll**.
 
 This is not just a hackathon app. I am building it as a centerpiece **Product Engineer / AI Product Engineer portfolio project**, so I care about product judgment, architecture, AI evaluation, reliability, deployment, observability, and being able to explain every important technical decision myself.

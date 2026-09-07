@@ -1,3 +1,7 @@
+> Historical implementation prompt. Required starts_at/ends_at and time-order creation
+> validation were superseded on 2026-09-07 by [ADR 005](../adr/005-event-boundaries-are-not-membership.md).
+> New events use optional event_date; do not reimplement the obsolete contract below.
+
 We finished the initial Gatheroll foundation.
 
 The repository currently has:

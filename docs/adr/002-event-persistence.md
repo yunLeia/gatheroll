@@ -2,6 +2,11 @@
 
 Status: Accepted — 2026-09-06
 
+Partially superseded 2026-09-07 by [ADR 005](005-event-boundaries-are-not-membership.md):
+required exact times, viewer-local event-time display and ends_at-anchored expiry are
+historical. SQL persistence/capability principles remain; new events use optional date
+and creation-anchored expiry bookkeeping. Original reasoning below is preserved.
+
 ## Context
 An event URL must survive API restarts. The first slice needs one table and
 simple create/read operations, plus a schema history that can be learned and reviewed.

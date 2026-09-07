@@ -1,0 +1,11 @@
+{
+  "version": "metadata-v1-provisional",
+  "before_grace_minutes": 30,
+  "after_grace_minutes": 30,
+  "location_full_meters": 100,
+  "location_zero_meters": 1000,
+  "time_weight": 1,
+  "location_weight": 1,
+  "select_threshold": 0.9,
+  "review_threshold": 0.4
+}

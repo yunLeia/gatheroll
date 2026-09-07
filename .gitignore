@@ -17,3 +17,7 @@ __pycache__/
 .env
 .env.local
 .DS_Store
+
+# Local private evaluation originals, manifests, derived metadata and results
+eval_data/
+.eval-build/

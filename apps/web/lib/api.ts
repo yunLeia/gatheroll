@@ -3,8 +3,7 @@ export type ParticipantStatus = "pending" | "approved" | "rejected";
 export type EventInfo = {
   id: string;
   title: string;
-  starts_at: string;
-  ends_at: string;
+  event_date: string | null;
   location_name: string | null;
   share_token: string;
   join_policy: JoinPolicy;
@@ -25,8 +24,7 @@ export type ParticipantPreferences = {
 };
 export type CreateInput = {
   title: string;
-  starts_at: string;
-  ends_at: string;
+  event_date?: string | null;
   location_name: string | null;
   join_policy: JoinPolicy;
 };
