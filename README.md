@@ -44,8 +44,9 @@ The system recommends; the person sharing has final control.
 
 ## Current status
 
-The repository implements event creation, host management, QR invitations and
-no-account participant approval. Photo sharing is not implemented:
+The repository implements event creation, host management, QR invitations,
+no-account participant approval, and private photo intake. Photo sharing and AI
+are not implemented:
 
 - a mobile-first Next.js frontend
 - a FastAPI backend with `GET /health`
@@ -54,35 +55,36 @@ no-account participant approval. Photo sharing is not implemented:
 - a host page at `/manage/{share_token}`, local QR rendering and copy invite link
 - Private (approval required, default) / Public (instant join) policies; both unlisted
 - participant pending/approved/rejected states and browser restoration
-- two Alembic migrations and PostgreSQL authorization tests
+- approved participant multi-photo picker, previews and bounded direct-to-R2 uploads
+- private own-photo listing, partial failure/retry, and refresh of confirmed uploads
+- three Alembic migrations and PostgreSQL authorization/state tests
 - backend Docker support
 - lint, type-check, test, and CI foundations
 - architectural decision records written as decisions are made
 
 Host and participant authentication use secret capabilities, without accounts.
-No AI, photo upload, object storage, account login or image processing is implemented.
+No AI, shared album, host access to participant photos, or account login is implemented.
+Originals and thumbnails are private objects, not automatically shared photos.
 
 ## Architecture
 
-Implemented locally: browser → FastAPI → SQLAlchemy/psycopg → PostgreSQL.
-Next.js serves the UI; browser JavaScript calls FastAPI directly. The hosting
-targets and object storage below are planned, not deployed.
+Next.js serves the UI; browser JavaScript calls FastAPI directly for JSON and private
+R2 directly for image bytes. Vercel/Railway/Neon remain hosting targets, not claimed
+deployments. Configure a real private R2 development bucket as described below.
 
 ```text
-Mobile browser (Next.js on Vercel)
-            │
-            │ HTTPS JSON API
-            ▼
-FastAPI service (Railway)
-      │              │
-      ▼              ▼
-Postgres (Neon)   Private objects (Cloudflare R2)
+Mobile browser (Next.js UI)
+      ├── JSON / authorization ──→ FastAPI ──→ PostgreSQL
+      │                              │
+      │←── short-lived PUT URLs ──────┘
+      └── original / thumbnail bytes ─────────→ Private R2
+                                     FastAPI ── HEAD ──→ R2
 ```
 
-The browser will eventually upload photo bytes directly to private R2 storage
-using short-lived presigned URLs. FastAPI will authorize operations and store
-metadata; Postgres may gain `pgvector` only when the embedding model and query
-needs are known. These are planned directions, not current dependencies.
+Neither Next.js nor FastAPI proxies photo bytes. FastAPI verifies the participant,
+creates photo records, signs uploads, and checks R2 metadata before confirming
+`uploaded_private`. Own previews use short-lived signed GETs, not public URLs.
+No embeddings, image analysis, shared grid or background processing is present.
 
 ## Repository structure
 
@@ -99,12 +101,18 @@ Read [current state](docs/STATUS.md), [working agreement](AGENTS.md),
 [original product brief](docs/product/original-brief.md),
 [Codex setup](docs/codex-workflow.md), [foundation learning notes](docs/learning/001-foundation-and-events.md),
 and [access/approval learning notes](docs/learning/002-event-access.md).
+See [private intake learning notes](docs/learning/003-private-photo-intake.md) for
+File/Blob, object storage, direct PUT, authorization and retry explanations.
 
 Frontend route files compose `features/events` and `features/participants`.
 `lib/api.ts` centralizes requests, `lib/credentials.ts` isolates browser persistence,
 and `lib/use-polling.ts` owns the small polling loop. Backend `schemas.py` describes
 contracts, `domain.py` contains policy/status enums, and `security.py` provides
 event-scoped authorization dependencies reused by event/participant routes.
+`features/photos/` separates selection validation, EXIF/thumbnail preparation,
+upload orchestration, photo API contracts and the intake panel. Backend `photos.py`
+owns photo transitions, `photo_schemas.py` the contracts and `storage.py` concrete
+R2 signing/HEAD. No generalized storage/repository framework is included.
 
 The apps own their dependencies. No monorepo orchestrator is included because
 two small applications do not yet justify one.
@@ -283,6 +291,60 @@ out of analytics/error logs. This is not yet a publicly deployed production albu
 See [mobile test record and real-phone checklist](docs/testing/002-mobile-access.md).
 375/390/430px browser checks and role flows are recorded separately from physical
 phone scanning. A QR with localhost cannot open this computer from another phone.
+Photo setup, exact limits, API contracts, synthetic measurements and pending
+iPhone/Safari tests: [private intake verification](docs/testing/003-private-photo-intake.md).
+
+## Private photo intake
+
+This slice's [completion summary and diagnostic log guide](docs/reports/003-private-photo-intake.md)
+records implementation, tests, physical-device evidence and remaining limitations.
+
+```text
+Approved participant → Add photos → explicit system selection → previews
+→ Upload privately → batch authorization → browser PUTs to private R2
+→ HEAD-verified completion → uploaded_private → refresh own uploads
+```
+
+The picker does not scan the whole camera roll. Selection does not start upload;
+the participant explicitly confirms **Upload privately**. Originals may include
+unrelated images and EXIF/location data. Uploaded is not shared: neither other
+participants nor the host can list these private photos. Sharing needs a later
+explicit user-confirmed workflow.
+
+Configure `apps/api/.env` using the separate `.env.example`, install updated API
+dependencies and apply migration 0003. Use private `gatheroll-dev` R2 credentials;
+never put secrets in `NEXT_PUBLIC_*`. Keep public access disabled and configure
+bucket CORS for the actual browser origin. Restart the API after changing `.env`.
+The [setup guide](docs/testing/003-private-photo-intake.md#real-r2-development-setup-one-provider)
+contains the exact settings and CORS example. Without storage configuration the API
+returns 503, not a fake success. Normal automated tests do not use real R2.
+
+`photos`: server UUID id, event/participant FKs, unique participant+client_id retry
+identity, status, original_key, nullable thumbnail_key/thumbnail_size_bytes,
+original_filename, content_type, file_size_bytes, nullable captured_at/GPS/dimensions,
+created_at, nullable uploaded_at. Only `pending_upload → uploaded_private` exists;
+the DB enforces timestamp consistency. No AI fields. FKs prevent parent removal
+before an explicit future object cleanup workflow.
+
+Defaults: 50 photos/batch, 25 MiB/original, 256 KiB/thumbnail, 500 records/participant.
+The server enforces limits; the UI reads them. JPEG/PNG/WebP/HEIC/HEIF originals are
+accepted. Three concurrent file jobs, sequential thumbnail preparation, 384px JPEG
+long side. Unsupported decoding gets a fallback; HEIC rendering is not universally
+promised. Captured time requires EXIF time plus explicit offset; GPS/dimensions are
+nullable and untrusted. Missing metadata is not a negative relevance signal.
+
+All `/events/{share}/photos` endpoints require an approved participant token:
+`GET /limits`, `POST /uploads` (batch metadata → signed targets),
+`POST /{photo_id}/complete` (verified idempotent completion), and `GET /?offset=0`
+(own confirmed photos, 50/page with signed thumbnails). No host photo endpoint.
+See [full contracts and failure behavior](docs/testing/003-private-photo-intake.md#api-contracts).
+
+Retry keeps stable client IDs and skips successful PUT steps/files in the live tab.
+Completed records survive refresh, unfinished selections do not. This is not
+multipart or cross-refresh byte resumption. PUT URLs are reusable for 15 minutes;
+GETs expire after 5. MIME/size/HEAD checks do not establish content integrity or
+immutability. **No automatic photo retention deletion is implemented**: dev objects
+remain until manual cleanup. Quotas are not sufficient public-launch abuse controls.
 
 To evolve schema: change the ORM model, run `alembic revision --autogenerate -m
 "describe change"`, review the migration, then `alembic upgrade head` and tests.
@@ -307,6 +369,7 @@ GitHub Actions runs the same checks for pushes to `main` and pull requests.
 - [ADR 001: Use the web as Gatheroll's universal participation layer](docs/adr/001-web-first.md)
 - [ADR 002: Event persistence](docs/adr/002-event-persistence.md)
 - [ADR 003: Event access and no-account authorization](docs/adr/003-event-access-and-no-account-authorization.md)
+- [ADR 004: Private photo intake lifecycle](docs/adr/004-private-photo-intake-lifecycle.md)
 
 ## Intentionally not built yet
 
@@ -317,7 +380,7 @@ measurement justifies it.
 
 ## Next vertical slice
 
-After the real-phone joining check, design the private upload lifecycle ADR,
-then implement approved-participant authorization → explicit photo selection →
-client thumbnail in one bounded slice. Storage/upload follows the documented
-privacy and mobile-resume decision. No photo work is included in the current slice.
+The core iPhone/Safari QR + upload + refresh flow is user-confirmed. Finish remaining
+device edge-case checks and remote CI, and address any measured issues.
+Then establish a small consented golden dataset, labeling rules and a metadata-only
+event-relevance baseline. Do not add sophisticated AI or a shared album yet.

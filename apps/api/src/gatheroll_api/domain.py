@@ -10,3 +10,8 @@ class ParticipantStatus(StrEnum):
     PENDING = "pending"
     APPROVED = "approved"
     REJECTED = "rejected"
+
+
+class PhotoStatus(StrEnum):
+    PENDING_UPLOAD = "pending_upload"
+    UPLOADED_PRIVATE = "uploaded_private"

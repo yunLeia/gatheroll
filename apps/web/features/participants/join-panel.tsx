@@ -10,6 +10,7 @@ import {
 import { usePolling } from "@/lib/use-polling";
 import { Field } from "@/components/ui/field";
 import { Button } from "@/components/ui/button";
+import { IntakePanel } from "@/features/photos/intake-panel";
 
 export function JoinPanel({ event }: { event: EventInfo }) {
   const share = event.share_token;
@@ -138,10 +139,13 @@ export function JoinPanel({ event }: { event: EventInfo }) {
             {participant.status === "pending"
               ? "Waiting for the host to let you in…"
               : participant.status === "approved"
-                ? "Photos will appear here when sharing is available."
+                ? "You can now add your photos privately."
                 : "You can check with the person who invited you."}
           </p>
         </>
+      )}
+      {participant?.status === "approved" && token && !invalid && (
+        <IntakePanel key={share} share={share} token={token} />
       )}
       {!persistent && (
         <p role="status" className="mt-4 text-sm text-caution">

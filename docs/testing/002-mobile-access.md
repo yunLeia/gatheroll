@@ -28,10 +28,11 @@
   token before clean-route navigation; incoming capability links clean both browser
   history and Next's router state.
 
-## Physical device check — NOT YET PERFORMED
-The automated browser cannot operate a physical phone camera. Desktop rendering is
-not proof that scanning, native date pickers, or mobile Safari lifecycle work in practice.
-This is an outstanding acceptance check, not a measured success.
+## Physical device check — core flow user-confirmed
+The user reported iPhone/Safari QR participation through approval, photo upload and
+photo retention after refresh. The agent did not operate the phone. Device/version,
+separate join-policy cases and lifecycle edge cases remain unverified; see test
+record 003. The checklist below retains unconfirmed detailed cases.
 
 ### Same-Wi-Fi development setup
 Use synthetic events only. A phone's localhost points to the phone, not the Mac.

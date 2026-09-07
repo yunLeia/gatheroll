@@ -11,6 +11,7 @@ from starlette.responses import Response
 from gatheroll_api.config import get_settings
 from gatheroll_api.events import router
 from gatheroll_api.participants import router as participants_router
+from gatheroll_api.photos import router as photos_router
 
 
 class HealthResponse(BaseModel):
@@ -32,6 +33,7 @@ def create_app() -> FastAPI:
     )
     app.include_router(router)
     app.include_router(participants_router)
+    app.include_router(photos_router)
 
     @app.middleware("http")
     async def protect_responses(

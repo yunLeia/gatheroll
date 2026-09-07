@@ -1,10 +1,18 @@
 from datetime import datetime
 from uuid import UUID
 
-from sqlalchemy import CheckConstraint, DateTime, Enum, ForeignKey, String
+from sqlalchemy import (
+    BigInteger,
+    CheckConstraint,
+    DateTime,
+    Enum,
+    ForeignKey,
+    String,
+    UniqueConstraint,
+)
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
-from gatheroll_api.domain import JoinPolicy, ParticipantStatus
+from gatheroll_api.domain import JoinPolicy, ParticipantStatus, PhotoStatus
 
 
 class Base(DeclarativeBase):
@@ -74,3 +82,57 @@ class Participant(Base):
     joined_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     event: Mapped[Event] = relationship(back_populates="participants")
+
+
+class Photo(Base):
+    __tablename__ = "photos"
+    __table_args__ = (
+        UniqueConstraint("participant_id", "client_id", name="photo_client_identity"),
+        CheckConstraint("file_size_bytes > 0", name="photo_size_positive"),
+        CheckConstraint(
+            "thumbnail_size_bytes > 0", name="photo_thumbnail_size_positive"
+        ),
+        CheckConstraint("width > 0 AND height > 0", name="photo_dimensions_positive"),
+        CheckConstraint("latitude BETWEEN -90 AND 90", name="photo_latitude_range"),
+        CheckConstraint("longitude BETWEEN -180 AND 180", name="photo_longitude_range"),
+        CheckConstraint(
+            "(status = 'uploaded_private' AND uploaded_at IS NOT NULL) OR "
+            "(status = 'pending_upload' AND uploaded_at IS NULL)",
+            name="photo_upload_timestamp",
+        ),
+        CheckConstraint(
+            "thumbnail_key IS NULL OR "
+            "(thumbnail_size_bytes IS NOT NULL AND status = 'uploaded_private')",
+            name="photo_thumbnail_complete",
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(primary_key=True)
+    # RESTRICT/default NO ACTION: removing DB parents must not orphan private bytes.
+    event_id: Mapped[UUID] = mapped_column(ForeignKey("events.id"), index=True)
+    participant_id: Mapped[UUID] = mapped_column(
+        ForeignKey("participants.id"), index=True
+    )
+    client_id: Mapped[UUID]
+    status: Mapped[PhotoStatus] = mapped_column(
+        Enum(
+            PhotoStatus,
+            values_callable=lambda values: [v.value for v in values],
+            native_enum=False,
+            create_constraint=True,
+            name="photo_status",
+        )
+    )
+    original_key: Mapped[str] = mapped_column(String(200), unique=True)
+    thumbnail_key: Mapped[str | None] = mapped_column(String(200))
+    thumbnail_size_bytes: Mapped[int | None]
+    original_filename: Mapped[str] = mapped_column(String(255))
+    content_type: Mapped[str] = mapped_column(String(40))
+    file_size_bytes: Mapped[int] = mapped_column(BigInteger)
+    captured_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    latitude: Mapped[float | None]
+    longitude: Mapped[float | None]
+    width: Mapped[int | None]
+    height: Mapped[int | None]
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    uploaded_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
