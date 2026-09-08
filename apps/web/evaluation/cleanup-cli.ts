@@ -1,5 +1,7 @@
-import { readFile, mkdir, writeFile } from "node:fs/promises";
+import { readFile, mkdir, writeFile, access } from "node:fs/promises";
 import { createHash } from "node:crypto";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
 import path from "node:path";
 import { parseArgs } from "node:util";
 import sharp from "sharp";
@@ -7,7 +9,7 @@ import { computeBlurScore, possiblyBlurry, type CleanupConfig } from "../feature
 import { isLikelyScreenshot, type ScreenshotConfig } from "../features/cleanup/screenshot";
 import { groupExactDuplicates } from "../features/cleanup/duplicates";
 import { loadCleanupDataset, resolveCleanupPhoto } from "./cleanup-dataset";
-import { binaryMetrics } from "./cleanup-reporting";
+import { binaryMetrics, binaryErrorsMarkdown } from "./cleanup-reporting";
 import {
   compareSelfieBaselines,
   faceHeuristicDecision,
@@ -15,6 +17,36 @@ import {
   type SiglipArtifact,
 } from "./cleanup-selfie-compare";
 import { csv } from "./reporting";
+
+const execFileAsync = promisify(execFile);
+
+const HEIC_JPEG_CACHE_DIR = path.resolve("../../eval_data/.heic-jpeg-cache");
+
+// Eval-only bridge: sharp/libvips's heif plugin fails on real HEIC files in
+// this environment (confirmed: 15/15 real labeled HEIC files, all with the
+// same "Decoder plugin generated an error" failure -- a systematic
+// limitation, not per-file corruption). Uses macOS's built-in `sips` to
+// produce a cached JPEG copy for evaluation only; the original HEIC is
+// never touched. Falls back to null (caller marks the row undecodable) if
+// sips is unavailable (e.g. non-macOS) or conversion itself fails -- never
+// throws, never blocks the rest of the run.
+async function ensureJpegEvalCopy(originalPath: string): Promise<string | null> {
+  if (!/\.(heic|heif)$/i.test(originalPath)) return originalPath;
+  await mkdir(HEIC_JPEG_CACHE_DIR, { recursive: true });
+  const cached = path.join(HEIC_JPEG_CACHE_DIR, path.basename(originalPath) + ".jpg");
+  try {
+    await access(cached);
+    return cached; // already converted in a prior run
+  } catch {
+    /* not cached yet */
+  }
+  try {
+    await execFileAsync("sips", ["-s", "format", "jpeg", originalPath, "--out", cached]);
+    return cached;
+  } catch {
+    return null;
+  }
+}
 
 async function pixelsFromFile(file: string) {
   const { data, info } = await sharp(file).raw().toBuffer({ resolveWithObject: true });
@@ -27,27 +59,38 @@ async function runBlur(values: ReturnType<typeof parseArgs>["values"]) {
   const labeled = dataset.examples.filter((e) => e.is_blurry !== null);
   if (!labeled.length) throw new Error("No examples have is_blurry labeled");
 
-  const rows = await Promise.all(
-    labeled.map(async (e) => {
-      const file = await resolveCleanupPhoto(values.root as string, e.source_file);
-      const pixels = await pixelsFromFile(file);
-      const blur_score = computeBlurScore(pixels);
-      return {
-        photo_id: e.photo_id,
-        label: e.is_blurry!,
-        blur_score,
-        predicted: possiblyBlurry(blur_score, config),
-        notes: e.notes,
-      };
-    }),
-  );
-  const metrics = binaryMetrics(rows);
+  const scored: { photo_id: string; label: boolean; blur_score: number; predicted: boolean; notes: string }[] = [];
+  const undecodable: { photo_id: string; source_file: string; notes: string }[] = [];
+  for (const e of labeled) {
+    const file = await resolveCleanupPhoto(values.root as string, e.source_file);
+    const evalPath = await ensureJpegEvalCopy(file);
+    if (evalPath === null) {
+      undecodable.push({ photo_id: e.photo_id, source_file: e.source_file, notes: e.notes });
+      continue;
+    }
+    const pixels = await pixelsFromFile(evalPath);
+    const blur_score = computeBlurScore(pixels);
+    scored.push({
+      photo_id: e.photo_id,
+      label: e.is_blurry!,
+      blur_score,
+      predicted: possiblyBlurry(blur_score, config),
+      notes: e.notes,
+    });
+  }
+  if (undecodable.length) {
+    console.warn(
+      `${undecodable.length}/${labeled.length} labeled photo(s) could not be decoded for blur scoring and were excluded from metrics: ` +
+        undecodable.map((u) => u.photo_id).join(", "),
+    );
+  }
+  const metrics = binaryMetrics(scored);
 
   const sweep = values.sweep
     ? [20, 50, 100, 150, 200, 300, 500].map((blur_threshold) => ({
         blur_threshold,
         ...binaryMetrics(
-          rows.map((r) => ({
+          scored.map((r) => ({
             label: r.label,
             predicted: possiblyBlurry(r.blur_score, { ...config, blur_threshold }),
           })),
@@ -60,8 +103,15 @@ async function runBlur(values: ReturnType<typeof parseArgs>["values"]) {
   await mkdir(out, { mode: 0o700 });
   await Promise.all(
     [
-      ["results.json", JSON.stringify({ config, metrics, rows, sweep }, null, 2) + "\n"],
-      ["predictions.csv", csv(rows)],
+      [
+        "results.json",
+        JSON.stringify(
+          { config, metrics, rows: scored, sweep, undecodable, undecodable_count: undecodable.length },
+          null,
+          2,
+        ) + "\n",
+      ],
+      ["predictions.csv", csv(scored)],
       ["sweep.csv", csv(sweep)],
     ].map(([name, content]) =>
       writeFile(path.join(out, name), content, { mode: 0o600, flag: "wx" }),
@@ -96,19 +146,33 @@ async function runScreenshot(values: ReturnType<typeof parseArgs>["values"]) {
   );
   const metrics = binaryMetrics(rows);
 
+  let siglipMetrics: ReturnType<typeof binaryMetrics> | null = null;
+  let siglipRows: { photo_id: string; label: boolean; predicted: boolean; notes: string }[] = [];
+  if (values["siglip-artifact"]) {
+    const siglipArtifact = JSON.parse(await readFile(values["siglip-artifact"] as string, "utf8"));
+    siglipRows = labeled.map((e) => ({
+      photo_id: e.photo_id,
+      label: e.is_screenshot!,
+      predicted: siglipArtifact.results[e.photo_id]?.predicted_label === "screenshot",
+      notes: e.notes,
+    }));
+    siglipMetrics = binaryMetrics(siglipRows);
+  }
+
   const out = path.resolve(values.out as string);
   await mkdir(path.dirname(out), { recursive: true });
   await mkdir(out, { mode: 0o700 });
-  await Promise.all(
-    [
-      ["results.json", JSON.stringify({ config, metrics, rows }, null, 2) + "\n"],
-      ["predictions.csv", csv(rows)],
-    ].map(([name, content]) =>
-      writeFile(path.join(out, name), content, { mode: 0o600, flag: "wx" }),
-    ),
-  );
-  console.table({ screenshot: metrics });
-  console.log(`Wrote results.json, predictions.csv to ${out}. Treat output as private.`);
+  const files: [string, string][] = [
+    ["results.json", JSON.stringify({ config, metrics, rows, siglip_zero_shot: siglipMetrics }, null, 2) + "\n"],
+    ["predictions.csv", csv(rows)],
+  ];
+  if (siglipMetrics) {
+    files.push(["siglip-predictions.csv", csv(siglipRows)]);
+    files.push(["screenshot-siglip-errors.md", binaryErrorsMarkdown(siglipRows, "Screenshot SigLIP2 zero-shot errors")]);
+  }
+  await Promise.all(files.map(([name, content]) => writeFile(path.join(out, name), content, { mode: 0o600, flag: "wx" })));
+  console.table({ metadata_heuristic: metrics, ...(siglipMetrics ? { siglip_zero_shot: siglipMetrics } : {}) });
+  console.log(`Wrote ${files.map(([name]) => name).join(", ")} to ${out}. Treat output as private.`);
 }
 
 const DETECTOR_DEFAULTS: Record<string, { config?: string; out: string }> = {

@@ -4,7 +4,7 @@ import { createRequire } from "node:module";
 const require = createRequire(import.meta.url);
 const { computeBlurScore, possiblyBlurry } = require("../.eval-build/features/cleanup/blur.js");
 const { validateCleanupDataset } = require("../.eval-build/evaluation/cleanup-dataset.js");
-const { binaryMetrics } = require("../.eval-build/evaluation/cleanup-reporting.js");
+const { binaryMetrics, binaryErrorKind, binaryErrorsMarkdown } = require("../.eval-build/evaluation/cleanup-reporting.js");
 const { isLikelyScreenshot } = require("../.eval-build/features/cleanup/screenshot.js");
 
 function solid(width, height, value) {
@@ -55,6 +55,25 @@ test("binaryMetrics computes precision/recall/fpr for boolean labels, null denom
   assert.equal(m.tp, 1); assert.equal(m.fn, 1); assert.equal(m.fp, 1); assert.equal(m.tn, 1);
   assert.equal(m.precision, 0.5); assert.equal(m.recall, 0.5);
   assert.equal(binaryMetrics([]).precision, null);
+});
+
+test("binaryErrorKind classifies FP/FN, null when correct", () => {
+  assert.equal(binaryErrorKind({ label: false, predicted: true }), "FP");
+  assert.equal(binaryErrorKind({ label: true, predicted: false }), "FN");
+  assert.equal(binaryErrorKind({ label: true, predicted: true }), null);
+  assert.equal(binaryErrorKind({ label: false, predicted: false }), null);
+});
+test("binaryErrorsMarkdown lists only FP/FN rows with the given title", () => {
+  const md = binaryErrorsMarkdown(
+    [
+      { photo_id: "a", label: true, predicted: false, notes: "missed screenshot" },
+      { photo_id: "b", label: true, predicted: true, notes: "correct" },
+    ],
+    "Screenshot SigLIP2 errors",
+  );
+  assert.ok(md.includes("Screenshot SigLIP2 errors"));
+  assert.ok(md.includes("missed screenshot"));
+  assert.ok(!md.includes("correct"));
 });
 
 test("cleanup dataset validation requires photo_id/source_file/notes and rejects unknown fields", () => {

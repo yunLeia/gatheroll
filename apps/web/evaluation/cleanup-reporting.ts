@@ -24,3 +24,25 @@ export function binaryMetrics(rows: BinaryRow[]) {
     accuracy: ratio(tp + tn, rows.length),
   };
 }
+
+export type BinaryErrorRow = { photo_id: string; label: boolean; predicted: boolean; notes: string };
+
+export function binaryErrorKind(row: Pick<BinaryErrorRow, "label" | "predicted">): "FP" | "FN" | null {
+  if (!row.label && row.predicted) return "FP";
+  if (row.label && !row.predicted) return "FN";
+  return null;
+}
+
+export function binaryErrorsMarkdown(rows: BinaryErrorRow[], title: string): string {
+  const safe = (v: unknown) =>
+    String(v ?? "missing").replaceAll("|", "\\|").replace(/[\r\n]/g, " ").replaceAll("<", "&lt;").replaceAll(">", "&gt;");
+  const header = `# ${title}\n\n| ID | Label | Predicted | Error | Note |\n|---|---|---|---|---|\n`;
+  return (
+    header +
+    rows
+      .filter((r) => binaryErrorKind(r))
+      .map((r) => `| ${safe(r.photo_id)} | ${r.label} | ${r.predicted} | ${binaryErrorKind(r)} | ${safe(r.notes)} |`)
+      .join("\n") +
+    "\n"
+  );
+}
