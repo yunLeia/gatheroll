@@ -120,3 +120,31 @@ test("require_missing_camera_exif, when true, also requires absent camera EXIF",
     true,
   );
 });
+
+const { faceHeuristicDecision, compareSelfieBaselines } = require("../.eval-build/evaluation/cleanup-selfie-compare.js");
+
+test("faceHeuristicDecision requires at least one centered, sufficiently large face", () => {
+  assert.equal(faceHeuristicDecision({ face_count: 1, largest_face_area_ratio: 0.3, centered: true }, 0.2), true);
+  assert.equal(faceHeuristicDecision({ face_count: 1, largest_face_area_ratio: 0.1, centered: true }, 0.2), false);
+  assert.equal(faceHeuristicDecision({ face_count: 0, largest_face_area_ratio: 0, centered: false }, 0.2), false);
+  assert.equal(faceHeuristicDecision({ face_count: 1, largest_face_area_ratio: 0.5, centered: false }, 0.2), false);
+});
+
+test("compareSelfieBaselines reports both techniques over the same labeled rows", () => {
+  const dataset = { examples: [
+    { photo_id: "a", is_selfie: true }, { photo_id: "b", is_selfie: false },
+  ] };
+  const faceArtifact = { results: {
+    a: { face_count: 1, largest_face_area_ratio: 0.4, centered: true },
+    b: { face_count: 2, largest_face_area_ratio: 0.1, centered: false },
+  } };
+  const siglipArtifact = { results: {
+    a: { selfie: 5, portrait_by_other: 1, group_photo: 0, predicted_label: "selfie" },
+    b: { selfie: 0, portrait_by_other: 1, group_photo: 4, predicted_label: "group_photo" },
+  } };
+  const report = compareSelfieBaselines(dataset, faceArtifact, siglipArtifact, 0.2);
+  assert.equal(report.face_heuristic.tp, 1);
+  assert.equal(report.face_heuristic.tn, 1);
+  assert.equal(report.siglip_zero_shot.tp, 1);
+  assert.equal(report.siglip_zero_shot.tn, 1);
+});

@@ -6,6 +6,12 @@ import { computeBlurScore, possiblyBlurry, type CleanupConfig } from "../feature
 import { isLikelyScreenshot, type ScreenshotConfig } from "../features/cleanup/screenshot";
 import { loadCleanupDataset, resolveCleanupPhoto } from "./cleanup-dataset";
 import { binaryMetrics } from "./cleanup-reporting";
+import {
+  compareSelfieBaselines,
+  faceHeuristicDecision,
+  type FaceArtifact,
+  type SiglipArtifact,
+} from "./cleanup-selfie-compare";
 import { csv } from "./reporting";
 
 async function pixelsFromFile(file: string) {
@@ -103,13 +109,64 @@ async function runScreenshot(values: ReturnType<typeof parseArgs>["values"]) {
   console.log(`Wrote results.json, predictions.csv to ${out}. Treat output as private.`);
 }
 
-const DETECTOR_DEFAULTS: Record<string, { config: string; out: string }> = {
+const DETECTOR_DEFAULTS: Record<string, { config?: string; out: string }> = {
   blur: { config: "../../eval/config/cleanup-blur-v1.json", out: "../../eval_data/cleanup-blur-results" },
   screenshot: {
     config: "../../eval/config/cleanup-screenshot-v1.json",
     out: "../../eval_data/cleanup-screenshot-results",
   },
+  // No config file: there is no fixed production threshold to version yet --
+  // this mode only produces a comparison report over a threshold sweep.
+  selfie: { out: "../../eval_data/cleanup-selfie-compare" },
 };
+
+const FACE_AREA_THRESHOLD_SWEEP = [0.05, 0.1, 0.15, 0.2, 0.3];
+
+async function runSelfie(values: ReturnType<typeof parseArgs>["values"]) {
+  if (!values["face-artifact"] || !values["siglip-artifact"]) {
+    throw new Error("--face-artifact and --siglip-artifact required for --detector selfie");
+  }
+  const dataset = await loadCleanupDataset(values.manifest as string);
+  const faceArtifact: FaceArtifact = JSON.parse(await readFile(values["face-artifact"] as string, "utf8"));
+  const siglipArtifact: SiglipArtifact = JSON.parse(
+    await readFile(values["siglip-artifact"] as string, "utf8"),
+  );
+  const labeled = dataset.examples.filter((e) => e.is_selfie !== null);
+  if (!labeled.length) throw new Error("No examples have is_selfie labeled");
+
+  const comparison = FACE_AREA_THRESHOLD_SWEEP.map((face_area_threshold) => ({
+    face_area_threshold,
+    ...compareSelfieBaselines(dataset, faceArtifact, siglipArtifact, face_area_threshold).face_heuristic,
+  }));
+  // SigLIP has no threshold to sweep -- report it once, alongside the sweep.
+  const siglipMetrics = compareSelfieBaselines(dataset, faceArtifact, siglipArtifact, 0).siglip_zero_shot;
+
+  const predictions = labeled.map((e) => ({
+    photo_id: e.photo_id,
+    label: e.is_selfie,
+    face_geometry: faceArtifact.results[e.photo_id],
+    face_predicted_at_0_2: faceHeuristicDecision(faceArtifact.results[e.photo_id], 0.2),
+    siglip_predicted_label: siglipArtifact.results[e.photo_id]?.predicted_label ?? null,
+    notes: e.notes,
+  }));
+
+  const out = path.resolve((values.out as string) ?? "../../eval_data/cleanup-selfie-compare");
+  await mkdir(path.dirname(out), { recursive: true });
+  await mkdir(out, { mode: 0o700 });
+  await Promise.all(
+    [
+      [
+        "results.json",
+        JSON.stringify({ face_heuristic_sweep: comparison, siglip_zero_shot: siglipMetrics, predictions }, null, 2) + "\n",
+      ],
+      ["comparison.csv", csv([...comparison.map((c) => ({ technique: "face_heuristic", ...c })), { technique: "siglip_zero_shot", ...siglipMetrics }])],
+      ["predictions.csv", csv(predictions)],
+    ].map(([name, content]) => writeFile(path.join(out, name), content, { mode: 0o600, flag: "wx" })),
+  );
+  console.table(comparison);
+  console.table({ siglip_zero_shot: siglipMetrics });
+  console.log(`Wrote results.json, comparison.csv, predictions.csv to ${out}. Treat output as private.`);
+}
 
 async function main() {
   const { values } = parseArgs({
@@ -120,12 +177,15 @@ async function main() {
       out: { type: "string" },
       detector: { type: "string", default: "blur" },
       sweep: { type: "boolean", default: false },
+      "face-artifact": { type: "string" },
+      "siglip-artifact": { type: "string" },
       help: { type: "boolean", default: false },
     },
   });
   if (values.help) {
     console.log(
-      "npm run eval:cleanup -- --manifest PATH --root PHOTO_ROOT [--detector blur|screenshot] [--config PATH] [--out NEW_DIR] [--sweep]\n" +
+      "npm run eval:cleanup -- --manifest PATH --root PHOTO_ROOT [--detector blur|screenshot|selfie] [--config PATH] [--out NEW_DIR] [--sweep]\n" +
+        "  [--face-artifact PATH --siglip-artifact PATH]  (selfie only; from eval/cleanup/face_heuristic.py and selfie_zero_shot.py)\n" +
         "Evaluates a cleanup detector against human labels in a cleanup-dataset manifest. Output directory must not exist.",
     );
     return;
@@ -142,6 +202,7 @@ async function main() {
     if (values.sweep) console.warn("--sweep has no effect for --detector screenshot (no continuous threshold to sweep); ignoring.");
     return runScreenshot(values);
   }
+  if (detector === "selfie") return runSelfie(values);
 }
 
 main().catch((error) => {
