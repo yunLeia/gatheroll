@@ -1,4 +1,16 @@
-# Event relevance labeling — v2 (2026-09-07)
+# Event relevance labeling — v2 (2026-09-07, superseded 2026-09-08)
+
+## Superseded — 2026-09-08
+
+[ADR 007](../adr/007-cleanup-first-ai-direction.md)에 따라 event relevance는
+더 이상 V1 AI 대상이 아니다 — 참가자의 선택을 그대로 relevance로 신뢰한다.
+아래 라벨링 규칙(belongs/does_not_belong/ambiguous)은 폐기된
+`relevance-embeddings` 실험을 위해 쓰였던 기록으로 보존한다. 다음 AI
+작업(스크린샷/셀피/블러 감지)은 사진 단위의 훨씬 단순한 이진 라벨이
+필요해서 이 스킴을 그대로 쓰지 않는다. 배경은
+[학습 노트 006](../learning/006-vision-ai-direction-pivot.md) 참고.
+
+---
 
 참여자의 명시적 broad selection이 첫 relevance filter다. 정답 질문은 “선택된 이 사진이
 실제로 함께한 모임의 일부인가?”다. host time window 안/밖이나 GPS 일치로 라벨링하지

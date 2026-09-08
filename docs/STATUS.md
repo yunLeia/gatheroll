@@ -1,8 +1,20 @@
 # Gatheroll status
 
-Updated: 2026-09-07
+Updated: 2026-09-08
 
 ## Implemented
+- **AI direction pivot (ADR 007, 2026-09-08):** event relevance is no longer a V1
+  AI target. Participant selection is trusted as relevance directly. AI investment
+  moves to pre-upload cleanup (screenshot/selfie/blur detection, suggest-only),
+  shared-album multi-label filters, and download exclusion of a participant's own
+  uploads. A SigLIP2 embedding-similarity relevance experiment was designed and
+  implemented (local embedding generator with caching/versioning, centroid/
+  nearest-neighbor/top-k mean baselines) on branch `relevance-embeddings` before
+  this correction, before any real labels were collected. Kept unmerged as
+  experimental history, not deleted — see ADR 007's branch-disposition section for
+  what's reusable (the embedding generator/caching pattern) versus relevance-
+  specific (the scoring baselines, the belongs/does_not_belong labeling scheme).
+  See also [learning note 006](learning/006-vision-ai-direction-pivot.md).
 - Product correction (ADR 005): participant selection is the first relevance filter;
   exact host boundaries are not membership criteria. Time/GPS are weak context only.
 - Create/API/header: name, optional event_date/location, join policy. Retired starts_at/
@@ -106,6 +118,10 @@ Updated: 2026-09-07
   cleanly and `alembic check` reported no drift, using an isolated
   disposable Postgres schema inside `gatheroll_test` (not the shared
   dev/test database, which is owned by a concurrent session).
+- Resolved: migration 0004 (optional event context) and 0005 (upload
+  preferences) both branched from 0003 independently; merged with
+  `alembic merge` into 0006. Single head confirmed (`alembic heads` reports
+  only `0006`); local `gatheroll`/`gatheroll_test` upgraded to it cleanly.
 - Development diagnostic panel verified in the LAN browser with a synthetic
   participant: list_loaded count shown without credentials, filenames or URLs.
 - User-reported physical iPhone/Safari check: QR participation → approval → photo
@@ -171,21 +187,17 @@ Updated: 2026-09-07
   no POST idempotency keys; photo initialization has scoped client UUID idempotency.
 - Legacy events with NULL manage_token_hash remain readable but unmanageable.
 - Docker is still unavailable locally. Python dependencies remain version ranges.
-- Migration 0005 branches from 0003, not 0004: a concurrent, unrelated task in
-  another session already claims revision id "0004" for a different migration.
-  An `alembic merge` will be needed once that migration lands on this branch.
 
 ## Next step
-Align development LAN URLs/origins with the current IP before phone recheck (currently
-172.16.29.99; do not assume it stays fixed). Then collect/label intentionally selected
-real batches by human gathering context and evaluate all-selected. Do not tune historical
-time/GPS membership thresholds further or integrate them into production. Only later
-consider visual/context improvement over participant selection, with privacy confirmation.
+**Pre-upload Cleanup v1** (ADR 007): screenshot detection, selfie detection, and
+blur/low-quality detection on a participant's own selected photos, before upload.
+AI suggests, the participant confirms include/exclude — never automatic removal.
+Technical plan (technique choice, browser-vs-backend, whether SigLIP2 is actually
+useful per sub-problem, evaluation approach, false-positive risk) proposed for
+approval before implementation; event relevance, clustering, shared-album
+classification, pHash/near-duplicate detection, external vision APIs, and
+download ZIP infrastructure remain explicitly out of scope until their own slice.
 
-Separately, upload preferences are now stored and surfaced in the UI but not yet
-enforced by any automatic filtering. The next product slice on that track is a
-multi-label shared album: allow approved participants to tag their uploaded
-photos with labels (e.g. "group", "landmarks", "food"), share tagged photos to
-an album view only other approved participants of the same event can see, and
-explore grouping by label. Evaluate the album view with user feedback before
-building AI classification/filtering.
+Align development LAN URLs/origins with the current IP before phone recheck
+(currently 172.16.29.99; do not assume it stays fixed) — unrelated infrastructure
+follow-up, independent of the AI direction above.
