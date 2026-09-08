@@ -5,6 +5,7 @@ const require = createRequire(import.meta.url);
 const { computeBlurScore, possiblyBlurry } = require("../.eval-build/features/cleanup/blur.js");
 const { validateCleanupDataset } = require("../.eval-build/evaluation/cleanup-dataset.js");
 const { binaryMetrics } = require("../.eval-build/evaluation/cleanup-reporting.js");
+const { isLikelyScreenshot } = require("../.eval-build/features/cleanup/screenshot.js");
 
 function solid(width, height, value) {
   const data = new Uint8ClampedArray(width * height * 4).fill(value);
@@ -69,4 +70,53 @@ test("cleanup dataset validation requires photo_id/source_file/notes and rejects
   assert.throws(() => validateCleanupDataset(extraField));
   const duplicateId = { ...valid, examples: [valid.examples[0], valid.examples[0]] };
   assert.throws(() => validateCleanupDataset(duplicateId));
+});
+
+const SCREENSHOT_CONFIG = {
+  version: "cleanup-screenshot-v1-provisional",
+  require_png: true,
+  require_missing_camera_exif: false,
+  known_dimensions: [{ width: 1170, height: 2532 }],
+};
+
+test("PNG at a known device screenshot resolution is flagged", () => {
+  assert.equal(
+    isLikelyScreenshot({ content_type: "image/png", width: 1170, height: 2532, has_camera_exif: false }, SCREENSHOT_CONFIG),
+    true,
+  );
+});
+test("JPEG at the same resolution is not flagged (wrong format)", () => {
+  assert.equal(
+    isLikelyScreenshot({ content_type: "image/jpeg", width: 1170, height: 2532, has_camera_exif: false }, SCREENSHOT_CONFIG),
+    false,
+  );
+});
+test("PNG at an unrecognized resolution is not flagged", () => {
+  assert.equal(
+    isLikelyScreenshot({ content_type: "image/png", width: 500, height: 500, has_camera_exif: false }, SCREENSHOT_CONFIG),
+    false,
+  );
+});
+test("missing width/height never throws, treated as not matching", () => {
+  assert.equal(
+    isLikelyScreenshot({ content_type: "image/png", width: null, height: null, has_camera_exif: false }, SCREENSHOT_CONFIG),
+    false,
+  );
+});
+test("portrait/landscape orientation of a known resolution both match", () => {
+  assert.equal(
+    isLikelyScreenshot({ content_type: "image/png", width: 2532, height: 1170, has_camera_exif: false }, SCREENSHOT_CONFIG),
+    true,
+  );
+});
+test("require_missing_camera_exif, when true, also requires absent camera EXIF", () => {
+  const strict = { ...SCREENSHOT_CONFIG, require_missing_camera_exif: true };
+  assert.equal(
+    isLikelyScreenshot({ content_type: "image/png", width: 1170, height: 2532, has_camera_exif: true }, strict),
+    false,
+  );
+  assert.equal(
+    isLikelyScreenshot({ content_type: "image/png", width: 1170, height: 2532, has_camera_exif: false }, strict),
+    true,
+  );
 });

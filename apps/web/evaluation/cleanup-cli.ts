@@ -3,6 +3,7 @@ import path from "node:path";
 import { parseArgs } from "node:util";
 import sharp from "sharp";
 import { computeBlurScore, possiblyBlurry, type CleanupConfig } from "../features/cleanup/blur";
+import { isLikelyScreenshot, type ScreenshotConfig } from "../features/cleanup/screenshot";
 import { loadCleanupDataset, resolveCleanupPhoto } from "./cleanup-dataset";
 import { binaryMetrics } from "./cleanup-reporting";
 import { csv } from "./reporting";
@@ -62,13 +63,61 @@ async function runBlur(values: ReturnType<typeof parseArgs>["values"]) {
   console.log(`Wrote results.json, predictions.csv, sweep.csv to ${out}. Treat output as private.`);
 }
 
+async function runScreenshot(values: ReturnType<typeof parseArgs>["values"]) {
+  const dataset = await loadCleanupDataset(values.manifest as string);
+  const config: ScreenshotConfig = JSON.parse(await readFile(values.config as string, "utf8"));
+  const labeled = dataset.examples.filter((e) => e.is_screenshot !== null);
+  if (!labeled.length) throw new Error("No examples have is_screenshot labeled");
+
+  const rows = await Promise.all(
+    labeled.map(async (e) => {
+      const file = await resolveCleanupPhoto(values.root as string, e.source_file);
+      const meta = await sharp(file).metadata();
+      const content_type = meta.format ? `image/${meta.format === "jpeg" ? "jpeg" : meta.format}` : "";
+      const predicted = isLikelyScreenshot(
+        {
+          content_type,
+          width: meta.width ?? null,
+          height: meta.height ?? null,
+          has_camera_exif: meta.exif !== undefined,
+        },
+        config,
+      );
+      return { photo_id: e.photo_id, label: e.is_screenshot!, predicted, content_type, notes: e.notes };
+    }),
+  );
+  const metrics = binaryMetrics(rows);
+
+  const out = path.resolve(values.out as string);
+  await mkdir(path.dirname(out), { recursive: true });
+  await mkdir(out, { mode: 0o700 });
+  await Promise.all(
+    [
+      ["results.json", JSON.stringify({ config, metrics, rows }, null, 2) + "\n"],
+      ["predictions.csv", csv(rows)],
+    ].map(([name, content]) =>
+      writeFile(path.join(out, name), content, { mode: 0o600, flag: "wx" }),
+    ),
+  );
+  console.table({ screenshot: metrics });
+  console.log(`Wrote results.json, predictions.csv to ${out}. Treat output as private.`);
+}
+
+const DETECTOR_DEFAULTS: Record<string, { config: string; out: string }> = {
+  blur: { config: "../../eval/config/cleanup-blur-v1.json", out: "../../eval_data/cleanup-blur-results" },
+  screenshot: {
+    config: "../../eval/config/cleanup-screenshot-v1.json",
+    out: "../../eval_data/cleanup-screenshot-results",
+  },
+};
+
 async function main() {
   const { values } = parseArgs({
     options: {
       manifest: { type: "string" },
       root: { type: "string" },
-      config: { type: "string", default: "../../eval/config/cleanup-blur-v1.json" },
-      out: { type: "string", default: "../../eval_data/cleanup-blur-results" },
+      config: { type: "string" },
+      out: { type: "string" },
       detector: { type: "string", default: "blur" },
       sweep: { type: "boolean", default: false },
       help: { type: "boolean", default: false },
@@ -76,17 +125,23 @@ async function main() {
   });
   if (values.help) {
     console.log(
-      "npm run eval:cleanup -- --manifest PATH --root PHOTO_ROOT [--detector blur] [--config PATH] [--out NEW_DIR] [--sweep]\n" +
+      "npm run eval:cleanup -- --manifest PATH --root PHOTO_ROOT [--detector blur|screenshot] [--config PATH] [--out NEW_DIR] [--sweep]\n" +
         "Evaluates a cleanup detector against human labels in a cleanup-dataset manifest. Output directory must not exist.",
     );
     return;
   }
   if (!values.manifest || !values.root) throw new Error("--manifest and --root required");
-  if (values.detector === "blur") {
-    await runBlur(values);
-    return;
+  const detector = (values.detector as string) ?? "blur";
+  const defaults = DETECTOR_DEFAULTS[detector];
+  if (!defaults) throw new Error(`Unknown --detector: ${detector}`);
+  values.config ??= defaults.config;
+  values.out ??= defaults.out;
+
+  if (detector === "blur") return runBlur(values);
+  if (detector === "screenshot") {
+    if (values.sweep) console.warn("--sweep has no effect for --detector screenshot (no continuous threshold to sweep); ignoring.");
+    return runScreenshot(values);
   }
-  throw new Error(`Unknown --detector: ${values.detector}`);
 }
 
 main().catch((error) => {

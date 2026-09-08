@@ -1,6 +1,7 @@
 import { contentType } from "./selection";
 import { extractMetadata } from "./metadata";
 import { computeBlurScore } from "../cleanup/blur";
+import { isLikelyScreenshot, DEFAULT_SCREENSHOT_CONFIG } from "../cleanup/screenshot";
 import type { PhotoJob, PhotoMetadata } from "./types";
 
 export const THUMBNAIL_LONG_SIDE = 384;
@@ -68,15 +69,20 @@ export async function preparePhoto(
 ): Promise<PhotoJob> {
   const meta = await extractMetadata(file);
   const prepared = await thumbnail(file, meta, maxThumbnailBytes);
+  const type = contentType(file);
   return {
     input: {
       ...meta,
       client_id: clientId(),
       original_filename: file.name,
-      content_type: contentType(file),
+      content_type: type,
       file_size_bytes: file.size,
       thumbnail_size_bytes: prepared?.blob.size ?? null,
       blur_score: prepared?.blurScore ?? null,
+      is_likely_screenshot: isLikelyScreenshot(
+        { content_type: type, width: meta.width, height: meta.height, has_camera_exif: meta.has_camera_exif },
+        DEFAULT_SCREENSHOT_CONFIG,
+      ),
     },
     file,
     thumbnail: prepared?.blob ?? null,

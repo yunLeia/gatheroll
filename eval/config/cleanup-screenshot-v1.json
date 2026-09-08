@@ -1,0 +1,15 @@
+{
+  "version": "cleanup-screenshot-v1-provisional",
+  "require_png": true,
+  "require_missing_camera_exif": false,
+  "known_dimensions": [
+    { "width": 1170, "height": 2532 },
+    { "width": 1179, "height": 2556 },
+    { "width": 1284, "height": 2778 },
+    { "width": 1290, "height": 2796 },
+    { "width": 1080, "height": 2340 },
+    { "width": 828, "height": 1792 },
+    { "width": 750, "height": 1334 },
+    { "width": 1242, "height": 2688 }
+  ]
+}
