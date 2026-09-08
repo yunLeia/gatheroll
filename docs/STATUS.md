@@ -234,7 +234,42 @@ Updated: 2026-09-08
 - Legacy events with NULL manage_token_hash remain readable but unmanageable.
 - Docker is still unavailable locally. Python dependencies remain version ranges.
 
+- Suggest-only blur/duplicate review badges (commit 575f302): exact-duplicate
+  suggestion browser-verified end-to-end (two byte-identical JPEGs uploaded
+  under different filenames in a live Chrome session both correctly showed
+  "Possible duplicate," nothing auto-removed). Blur suggestion badge remains
+  unit-tested/evaluated only (report 007's 49-photo set) — the real-HEIC
+  browser path is still unverified; browser automation could not push actual
+  `.heic` files through the picker in that session (files were silently
+  skipped), and a JPEG proxy of a labeled-blurry photo scored above the
+  provisional `blur_threshold=100` and correctly went unflagged given that
+  threshold — not evidence of a bug, just an unverified path. A real iPhone/
+  Safari check with a genuinely blurry HEIC is planned separately.
+
+## Local dev troubleshooting notes
+- **Alembic drift → 503 on every participant join.** If `POST /events/{token}/participants`
+  returns `{"code":"service_unavailable"}` with no other detail, check `alembic current`
+  vs. `alembic heads` in `apps/api` before suspecting app logic — a local dev DB sitting
+  behind head (missing e.g. the 0005 `include_selfies`/`include_screenshots` columns) makes
+  every insert raise `SQLAlchemyError`, which `main.py`'s handler intentionally flattens to a
+  generic 503 (no column/table detail leaked to the client). Fix: `alembic upgrade head`
+  against the local DB; not a code bug. Hit and resolved this way during suggest-only
+  blur/duplicate badge browser verification (2026-09-08).
+
 ## Next step
+**Host photo gallery v1 proposed** (`docs/product/host-photo-gallery-v1-proposal.md`,
+2026-09-08): the original brief ranks "working shared album without AI"
+above relevance AI (already deferred by ADR 005/007), and it's the largest
+gap between what's built and the product's own pitch — the host can approve
+participants but has no photo-facing UI at all. Scope: read-only grid +
+per-photo on-demand original download, no ZIP/bulk download, no smart
+filtering (participant preferences stay unenforced, matching current state).
+Needs a new host-authorized photo-listing + per-photo download-URL endpoint
+in `apps/api` (none exists today — `GET /photos` is participant-scoped and
+never returns originals) before the frontend can be wired up for real; a
+non-mocked "Coming soon" stub (`apps/web/features/photos/host-gallery.tsx`)
+is slotted into the host page in the meantime.
+
 **Pre-upload Cleanup v1 code is implemented** (blur, screenshot × 2
 baselines, selfie comparison, exact duplicates); **real measurement now
 exists for blur and screenshot** (report 007, real 49-photo set) — selfie

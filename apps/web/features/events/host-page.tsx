@@ -7,6 +7,7 @@ import { api, ApiError, type EventInfo } from "@/lib/api";
 import { inviteLink, managePath, restoreHost } from "@/lib/credentials";
 import { EventHeader } from "./event-header";
 import { HostParticipants } from "@/features/participants/host-participants";
+import { HostGallery } from "@/features/photos/host-gallery";
 import { PageHeader } from "@/components/ui/page-header";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -141,6 +142,7 @@ export function HostPage({ share }: { share: string }) {
             )}
           </Card>
           <HostParticipants event={event} token={token} />
+          <HostGallery />
           <section className="mt-9 border-t border-border pt-7">
             <h2 className="text-lg font-semibold tracking-tight">
               Keep your host access
