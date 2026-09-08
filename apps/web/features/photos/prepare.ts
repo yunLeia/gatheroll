@@ -1,5 +1,6 @@
 import { contentType } from "./selection";
 import { extractMetadata } from "./metadata";
+import { computeBlurScore } from "../cleanup/blur";
 import type { PhotoJob, PhotoMetadata } from "./types";
 
 export const THUMBNAIL_LONG_SIDE = 384;
@@ -20,7 +21,7 @@ async function thumbnail(
   file: File,
   meta: PhotoMetadata,
   maxBytes: number,
-): Promise<Blob | null> {
+): Promise<{ blob: Blob; blurScore: number } | null> {
   if (meta.width && meta.height && meta.width * meta.height > MAX_DECODE_PIXELS)
     return null;
   const source = URL.createObjectURL(file);
@@ -43,11 +44,16 @@ async function thumbnail(
     ctx.fillStyle = "white";
     ctx.fillRect(0, 0, canvas.width, canvas.height);
     ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+    // Reuse this same canvas for blur scoring instead of decoding twice.
+    const blurScore = computeBlurScore({
+      ...ctx.getImageData(0, 0, canvas.width, canvas.height),
+      channels: 4,
+    });
     const blob = await new Promise<Blob | null>((resolve) =>
       canvas.toBlob(resolve, "image/jpeg", 0.75),
     );
     canvas.width = canvas.height = 0;
-    return blob && blob.size <= maxBytes ? blob : null;
+    return blob && blob.size <= maxBytes ? { blob, blurScore } : null;
   } catch {
     return null; // HEIC decoding varies by browser. The original remains uploadable.
   } finally {
@@ -61,7 +67,7 @@ export async function preparePhoto(
   maxThumbnailBytes: number,
 ): Promise<PhotoJob> {
   const meta = await extractMetadata(file);
-  const thumb = await thumbnail(file, meta, maxThumbnailBytes);
+  const prepared = await thumbnail(file, meta, maxThumbnailBytes);
   return {
     input: {
       ...meta,
@@ -69,11 +75,12 @@ export async function preparePhoto(
       original_filename: file.name,
       content_type: contentType(file),
       file_size_bytes: file.size,
-      thumbnail_size_bytes: thumb?.size ?? null,
+      thumbnail_size_bytes: prepared?.blob.size ?? null,
+      blur_score: prepared?.blurScore ?? null,
     },
     file,
-    thumbnail: thumb,
-    preview: thumb ? URL.createObjectURL(thumb) : null,
+    thumbnail: prepared?.blob ?? null,
+    preview: prepared ? URL.createObjectURL(prepared.blob) : null,
     state: "selected",
     originalUploaded: false,
     thumbnailUploaded: false,
