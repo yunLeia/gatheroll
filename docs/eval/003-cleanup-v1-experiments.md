@@ -4,9 +4,10 @@
 [docs/product/pre-upload-cleanup-v1-proposal.md](../product/pre-upload-cleanup-v1-proposal.md)
 and [ADR 007](../adr/007-cleanup-first-ai-direction.md). Read those first for
 *why*; this doc is *how to run each evaluation* and *what real labeled data
-each one needs* — none of this has real precision/recall numbers yet (see
-[report 006](../reports/006-cleanup-v1-smoke-evidence.md) for what has
-actually been measured so far: plumbing/smoke evidence, not accuracy).
+each one needs*. [Report 006](../reports/006-cleanup-v1-smoke-evidence.md)
+has the initial plumbing/smoke evidence; [report 007](../reports/007-cleanup-v1-real-evaluation.md)
+has the first real precision/recall numbers, from a real 49-photo labeled
+set, for blur and both screenshot baselines.
 
 ## Shared manifest shape
 
@@ -49,21 +50,45 @@ thresholds). The current `eval/config/cleanup-blur-v1.json` threshold (100)
 is a placeholder — replace it with whatever the sweep shows once real labels
 exist, not before.
 
-## 2. Screenshot
+**HEIC files:** `sharp`/libvips fails to decode real iPhone HEIC files in
+this environment (confirmed 15/15 in report 007). `runBlur` handles this
+automatically via an eval-only bridge: it converts each HEIC file to a
+cached JPEG under gitignored `eval_data/.heic-jpeg-cache/` using macOS's
+`sips` (no new dependency, nothing installed beyond what ships with
+macOS), and never touches the original file. If `sips` is unavailable
+(non-macOS) or a specific conversion fails, that row is excluded from
+metrics and counted in `results.json`'s `undecodable`/`undecodable_count`
+fields rather than silently dropped or scored with a fabricated value.
+
+## 2. Screenshot (metadata heuristic + SigLIP2 zero-shot comparison)
+
+The metadata heuristic measured **0% recall** on a real 49-photo set
+(report 007) — real screenshots' resolutions weren't in the hardcoded
+`known_dimensions` list, a structural limitation, not a tuning gap. It is
+retired as a production candidate; do not add more entries to the list.
+A content-based SigLIP2 zero-shot baseline (`screenshot_zero_shot.py`)
+replaces it as the thing actually worth comparing against, measured
+**100% recall / 85.7% precision** on the same set.
 
 ```bash
-npm --prefix apps/web run eval:cleanup -- \
-  --manifest eval_data/cleanup-manifest.json --root eval_data/photos \
-  --detector screenshot
+cd eval/cleanup && source .venv/bin/activate
+python3 screenshot_zero_shot.py --manifest ../../eval_data/cleanup-manifest.json --root ../../eval_data/photos --out ../../eval_data/screenshot-zero-shot-v1.json
+cd ../../apps/web
+npm run eval:cleanup -- \
+  --manifest ../../eval_data/cleanup-manifest.json --root ../../eval_data/photos \
+  --detector screenshot --siglip-artifact ../../eval_data/screenshot-zero-shot-v1.json
 ```
 **Data needed:** ~15 real screenshots (iOS and/or Android) + ~15 real camera
 photos, `is_screenshot` labeled.
-**Output:** `results.json`, `predictions.csv`. No sweep (no continuous
-threshold — the heuristic is format+dimension+EXIF, not a score).
-**This is the metadata heuristic only.** The proposal's "lightweight visual/
-zero-shot approach if needed" is not implemented — only pursue it if this
-baseline's measured precision/recall on real screenshots turns out
-insufficient.
+**Output:** `results.json` (both techniques' metrics, under `metrics` and
+`siglip_zero_shot`), `predictions.csv` (metadata heuristic), plus, when
+`--siglip-artifact` is supplied, `siglip-predictions.csv` and
+`screenshot-siglip-errors.md` (FP/FN listing with notes). No sweep for
+either technique — the metadata heuristic has no continuous threshold, and
+SigLIP2 zero-shot is compared once, not swept. `screenshot_zero_shot.py`
+handles HEIC transparently via `pillow_heif.register_heif_opener()` (see
+`eval/cleanup/README.md`); any file it still can't decode is excluded and
+listed in the artifact's `undecodable` array, never scored.
 
 ## 3. Selfie (two pretrained baselines, offline only)
 

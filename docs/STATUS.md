@@ -106,6 +106,20 @@ Updated: 2026-09-08
   found **zero duplicate groups across the real local 169-photo set**
   (a real measurement, not a smoke test — duplicate detection has no
   accuracy question to smoke-test in the first place).
+- **Pre-upload Cleanup v1: first real accuracy numbers** (report 007, real
+  49-photo labeled set). Screenshot metadata heuristic measured **0%
+  recall** (real screenshots' actual resolution, 1206×2622, wasn't in the
+  hardcoded `known_dimensions` list) — retired as a production candidate,
+  not scheduled for further tuning. A new content-based SigLIP2 zero-shot
+  baseline (`screenshot_zero_shot.py`) measured **100% recall / 85.7%
+  precision** on the same set (all 4 false positives were blurry camera
+  photos). Separately, `sharp` failed to decode 15/15 real labeled HEIC
+  files (`heif: Decoder plugin generated an error`, a systematic
+  environment limitation) — fixed with an eval-only `sips`-based JPEG
+  cache bridge that never touches original files; after the fix, blur
+  scoring covers the full 49-photo set (100% recall / 61.5% precision at
+  the still-placeholder `blur_threshold=100`) instead of silently
+  excluding 31% of it.
 - Current correction: web lint/typecheck/**32 tests**/production build and backend
   Ruff/mypy/**61 PostgreSQL tests** passed. Local dev/test Alembic check: no drift.
 - Migration 0004 applied locally: all pre-existing values of **10 events, 6 participants,
@@ -221,21 +235,21 @@ Updated: 2026-09-08
 - Docker is still unavailable locally. Python dependencies remain version ranges.
 
 ## Next step
-**Pre-upload Cleanup v1 code is implemented** (blur, screenshot, selfie
-comparison, exact duplicates — see report 006); **real measurement is not.**
-Collect the labeled fixtures in
-[eval guide 003](eval/003-cleanup-v1-experiments.md) (blur/screenshot/selfie
-each need real labeled photos; duplicates already has a real measurement,
-zero groups in the local set) and run each `npm run eval:cleanup` mode
-against them. Only after that: pick a real `blur_threshold`, decide whether
-the screenshot heuristic alone is sufficient or needs the deferred zero-shot
-comparison, and decide (evidence-gated) whether selfie detection is worth
-shipping at all and in which runtime. No review/exclude UI exists yet for
-any of the four signals — that's the deliberate next slice after real
-numbers exist, not before. Explicitly still out of scope: event relevance,
-clustering, shared-album classification, near-duplicate (pHash/embedding)
-detection, storing the content hash server-side for the future download-
-exclude promise, external vision APIs, and download ZIP infrastructure.
+**Pre-upload Cleanup v1 code is implemented** (blur, screenshot × 2
+baselines, selfie comparison, exact duplicates); **real measurement now
+exists for blur and screenshot** (report 007, real 49-photo set) — selfie
+still only has the report 006 plumbing check, not a real-set precision/
+recall run. n=49 is a real measurement, not synthetic, but still small
+relative to the 100–250 reference scale the earlier relevance-labeling
+guide used — treat current numbers as a start, not a final answer, and
+grow the labeled set before making any production call. No production/
+browser-vs-backend decision exists yet for any of the four signals, and no
+review/exclude UI exists yet either — that's the deliberate next slice
+after real numbers exist, not before. Explicitly still out of scope: event
+relevance, clustering, shared-album classification, near-duplicate
+(pHash/embedding) detection, storing the content hash server-side for the
+future download-exclude promise, external vision APIs, and download ZIP
+infrastructure.
 
 Align development LAN URLs/origins with the current IP before phone recheck
 (currently 172.16.29.99; do not assume it stays fixed) — unrelated infrastructure
