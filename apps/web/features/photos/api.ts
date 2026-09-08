@@ -1,4 +1,5 @@
 import { request } from "@/lib/api";
+import { toUploadPhoto } from "./wire";
 import type {
   Authorization,
   PhotoInput,
@@ -16,7 +17,7 @@ export function photoApi(share: string, token: string) {
     initialize: (photos: PhotoInput[], signal: AbortSignal) =>
       request<Authorization[]>(`${root}/uploads`, {
         method: "POST",
-        body: { photos },
+        body: { photos: photos.map(toUploadPhoto) },
         token,
         signal,
       }),

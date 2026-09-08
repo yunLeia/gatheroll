@@ -92,6 +92,41 @@ Updated: 2026-09-08
   any automatic filtering. ADR 006 and Korean learning note 005 added.
 
 ## Verified
+- **Real-device upload bug found and fixed (2026-09-08):** a phone test
+  (5 photos selected) failed with "Could not authorize upload"; API logs
+  showed `POST /photos/uploads` returning **422**, not a storage/connection
+  problem as the generic error text implied. Root cause: `PhotoInput` on the
+  client (`apps/web/features/photos/types.ts`) grew four suggestion-only
+  fields during the cleanup work (`has_camera_exif`, `blur_score`,
+  `is_likely_screenshot`, `content_hash`) that were never meant to leave the
+  browser, but `photos/api.ts`'s `initialize()` sent the full object as-is
+  into a request body the API's `PhotoInput` schema validates with
+  `extra="forbid"` (`apps/api/.../photo_schemas.py`) -- every batch with any
+  photo carrying those fields 422'd, unconditionally, regardless of storage
+  health. Nothing in existing lint/typecheck/56-test/build coverage caught
+  it: TypeScript's structural typing doesn't flag extra properties, and no
+  test exercised the real wire payload (existing tests inject a fake
+  `services.initialize`, bypassing `api.ts` entirely). Fixed by extracting
+  `toUploadPhoto()` (`apps/web/features/photos/wire.ts`) to strip the four
+  client-only fields before the request, with a new test asserting exactly
+  that, plus a test differentiating the old generic error message so a
+  future 4xx/5xx no longer blames storage. Verified two ways: (1) replayed
+  the literal old buggy payload against the live local API -> reproduced the
+  same 422 with `extra_forbidden` on all four fields; replayed the fixed
+  payload -> 200 with valid signed R2 URLs, proving storage/R2 itself was
+  never the problem; (2) full lint/typecheck/58-test/build clean.
+  **Not yet re-verified on an actual phone.** A related, separate, and
+  *unresolved* observation from this session: driving a full upload through
+  a live but automation-controlled Chrome session got past the (now-fixed)
+  422 cleanly, but the subsequent direct browser PUT to the R2 signed URL
+  consistently returned 503 (3/3 attempts) while replaying the identical
+  signed URL via plain `curl` from the same machine succeeded every time
+  (200). This pattern -- browser fails, curl with the same URL succeeds --
+  is consistent with Cloudflare-side bot/automation detection reacting to
+  the browser-automation session specifically (a known category of
+  Cloudflare behavior), not a genuine storage misconfiguration, but this is
+  not proven; it was not chased further pending a real, non-automated phone
+  retry, which is the authoritative test either way.
 - Pre-upload Cleanup v1: web lint/typecheck/build clean after each of the 4
   detector slices; **50/50 tests passing** (18 new in `cleanup.test.mjs`).
   Smoke evidence only, not accuracy metrics (full detail in report 006):
@@ -286,6 +321,30 @@ relevance, clustering, shared-album classification, near-duplicate
 future download-exclude promise, external vision APIs, and download ZIP
 infrastructure.
 
-Align development LAN URLs/origins with the current IP before phone recheck
-(currently 172.16.29.99; do not assume it stays fixed) — unrelated infrastructure
-follow-up, independent of the AI direction above.
+LAN URLs/origins realigned to the current IP (2026-09-08): the Mac's address
+changed again (now 10.17.77.0; still do not assume it stays fixed —
+re-check with `ipconfig getifaddr en0` each session). Updated
+`apps/web/.env.local` (`NEXT_PUBLIC_API_BASE_URL`) and `apps/api/.env`
+(`GATHEROLL_WEB_ORIGIN`) to the current IP and restarted both dev servers
+(`next dev` already binds all interfaces by default; `uvicorn` needed an
+explicit `--host 0.0.0.0`, which it was missing). Both confirmed reachable
+over LAN by IP (`/health` 200, web root 200). Not yet re-verified from an
+actual phone this session. Trade-off: `GATHEROLL_WEB_ORIGIN` only allows one
+CORS origin at a time, so laptop browser testing against `localhost:3000`
+will fail CORS while this is pointed at the LAN IP — use the LAN IP on the
+laptop too, or flip `.env` back for localhost-only work.
+
+**Follow-up, same day:** opening `http://10.17.77.0:3000` in an actual
+browser (not `curl`) hung forever on "Checking API…" despite both servers
+being individually reachable. Root cause was neither the servers nor the
+network: `apps/web/next.config.ts` had a stale `allowedDevOrigins:
+["192.168.1.185"]` left over from report 005's earlier LAN mismatch — Next
+dev's cross-origin protection silently blocks dev-resource requests from
+any origin not on that list, and a stale Turbopack-cached chunk (`.next/`)
+was also still serving the old `localhost:8000` API base URL. Fixed by
+updating `allowedDevOrigins` to the current IP, clearing `.next`, and
+restarting; browser-confirmed "API connected" afterward via a live Chrome
+session. Lesson for the next IP change: `allowedDevOrigins` in
+`next.config.ts` needs updating too, not just the two `.env` files, and a
+stale Turbopack cache is a real failure mode after an env change — `rm -rf
+.next` before assuming the app itself is broken.
