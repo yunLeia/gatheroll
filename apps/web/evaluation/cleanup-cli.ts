@@ -1,9 +1,11 @@
 import { readFile, mkdir, writeFile } from "node:fs/promises";
+import { createHash } from "node:crypto";
 import path from "node:path";
 import { parseArgs } from "node:util";
 import sharp from "sharp";
 import { computeBlurScore, possiblyBlurry, type CleanupConfig } from "../features/cleanup/blur";
 import { isLikelyScreenshot, type ScreenshotConfig } from "../features/cleanup/screenshot";
+import { groupExactDuplicates } from "../features/cleanup/duplicates";
 import { loadCleanupDataset, resolveCleanupPhoto } from "./cleanup-dataset";
 import { binaryMetrics } from "./cleanup-reporting";
 import {
@@ -168,6 +170,26 @@ async function runSelfie(values: ReturnType<typeof parseArgs>["values"]) {
   console.log(`Wrote results.json, comparison.csv, predictions.csv to ${out}. Treat output as private.`);
 }
 
+// Deliberately not a reuse of contentHash() (features/cleanup/duplicates.ts,
+// crypto.subtle-based, browser-only) -- same algorithm, different API,
+// matching how blur's browser path uses Canvas while its CLI path uses
+// sharp for the same underlying computation.
+async function runDuplicates(values: ReturnType<typeof parseArgs>["values"]) {
+  const dataset = await loadCleanupDataset(values.manifest as string);
+  const items = await Promise.all(
+    dataset.examples.map(async (e) => {
+      const file = await resolveCleanupPhoto(values.root as string, e.source_file);
+      const bytes = await readFile(file);
+      return { id: e.photo_id, content_hash: createHash("sha256").update(bytes).digest("hex") };
+    }),
+  );
+  const groups = groupExactDuplicates(items);
+  console.log(`${items.length} photos scanned; ${groups.size} exact-duplicate group(s) found.`);
+  for (const [hash, ids] of groups) console.log(`  ${hash.slice(0, 12)}...: ${ids.join(", ")}`);
+  if (groups.size === 0) console.log("No exact duplicates in this set.");
+  console.log("Descriptive count only -- no metrics file written (hash equality has no precision/recall).");
+}
+
 async function main() {
   const { values } = parseArgs({
     options: {
@@ -184,14 +206,15 @@ async function main() {
   });
   if (values.help) {
     console.log(
-      "npm run eval:cleanup -- --manifest PATH --root PHOTO_ROOT [--detector blur|screenshot|selfie] [--config PATH] [--out NEW_DIR] [--sweep]\n" +
+      "npm run eval:cleanup -- --manifest PATH --root PHOTO_ROOT [--detector blur|screenshot|selfie|duplicates] [--config PATH] [--out NEW_DIR] [--sweep]\n" +
         "  [--face-artifact PATH --siglip-artifact PATH]  (selfie only; from eval/cleanup/face_heuristic.py and selfie_zero_shot.py)\n" +
-        "Evaluates a cleanup detector against human labels in a cleanup-dataset manifest. Output directory must not exist.",
+        "Evaluates a cleanup detector against human labels in a cleanup-dataset manifest (duplicates needs no labels; it's a descriptive hash-group count). Output directory must not exist.",
     );
     return;
   }
   if (!values.manifest || !values.root) throw new Error("--manifest and --root required");
   const detector = (values.detector as string) ?? "blur";
+  if (detector === "duplicates") return runDuplicates(values);
   const defaults = DETECTOR_DEFAULTS[detector];
   if (!defaults) throw new Error(`Unknown --detector: ${detector}`);
   values.config ??= defaults.config;

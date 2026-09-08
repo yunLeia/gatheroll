@@ -148,3 +148,29 @@ test("compareSelfieBaselines reports both techniques over the same labeled rows"
   assert.equal(report.siglip_zero_shot.tp, 1);
   assert.equal(report.siglip_zero_shot.tn, 1);
 });
+
+const { groupExactDuplicates } = require("../.eval-build/features/cleanup/duplicates.js");
+
+test("groupExactDuplicates groups items sharing a hash and omits singletons", () => {
+  const items = [
+    { id: "a", content_hash: "h1" }, { id: "b", content_hash: "h1" },
+    { id: "c", content_hash: "h2" },
+  ];
+  const groups = groupExactDuplicates(items);
+  assert.deepEqual([...groups.keys()], ["h1"]);
+  assert.deepEqual(groups.get("h1"), ["a", "b"]);
+});
+test("groupExactDuplicates returns an empty map when nothing repeats", () => {
+  assert.equal(groupExactDuplicates([{ id: "a", content_hash: "h1" }]).size, 0);
+});
+test("groupExactDuplicates handles three-way duplicates and multiple groups", () => {
+  const items = [
+    { id: "a", content_hash: "h1" }, { id: "b", content_hash: "h1" }, { id: "c", content_hash: "h1" },
+    { id: "d", content_hash: "h2" }, { id: "e", content_hash: "h2" },
+    { id: "f", content_hash: "h3" },
+  ];
+  const groups = groupExactDuplicates(items);
+  assert.deepEqual(groups.get("h1"), ["a", "b", "c"]);
+  assert.deepEqual(groups.get("h2"), ["d", "e"]);
+  assert.equal(groups.has("h3"), false);
+});

@@ -2,6 +2,7 @@ import { contentType } from "./selection";
 import { extractMetadata } from "./metadata";
 import { computeBlurScore } from "../cleanup/blur";
 import { isLikelyScreenshot, DEFAULT_SCREENSHOT_CONFIG } from "../cleanup/screenshot";
+import { contentHash } from "../cleanup/duplicates";
 import type { PhotoJob, PhotoMetadata } from "./types";
 
 export const THUMBNAIL_LONG_SIDE = 384;
@@ -70,6 +71,10 @@ export async function preparePhoto(
   const meta = await extractMetadata(file);
   const prepared = await thumbnail(file, meta, maxThumbnailBytes);
   const type = contentType(file);
+  const content_hash = await file
+    .arrayBuffer()
+    .then(contentHash)
+    .catch(() => null);
   return {
     input: {
       ...meta,
@@ -83,6 +88,7 @@ export async function preparePhoto(
         { content_type: type, width: meta.width, height: meta.height, has_camera_exif: meta.has_camera_exif },
         DEFAULT_SCREENSHOT_CONFIG,
       ),
+      content_hash,
     },
     file,
     thumbnail: prepared?.blob ?? null,

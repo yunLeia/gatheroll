@@ -14,6 +14,7 @@ export type PhotoInput = PhotoMetadata & {
   thumbnail_size_bytes: number | null;
   blur_score: number | null;
   is_likely_screenshot: boolean;
+  content_hash: string | null;
 };
 export type UploadTarget = { url: string; headers: Record<string, string> };
 export type Authorization = {
