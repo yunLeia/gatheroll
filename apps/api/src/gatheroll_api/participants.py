@@ -11,6 +11,7 @@ from gatheroll_api.schemas import (
     ParticipantCreate,
     ParticipantDecision,
     ParticipantJoined,
+    ParticipantPreferencesUpdate,
     ParticipantResponse,
 )
 from gatheroll_api.security import (
@@ -45,6 +46,8 @@ def join_event(
         joined_at=now,
         status=ParticipantStatus.APPROVED if approved else ParticipantStatus.PENDING,
         approved_at=now if approved else None,
+        include_selfies=True,
+        include_screenshots=False,
     )
     session.add(participant)
     session.commit()
@@ -107,6 +110,19 @@ def decide_participant(
     participant.approved_at = (
         datetime.now(UTC) if data.status == ParticipantStatus.APPROVED else None
     )
+    session.commit()
+    session.refresh(participant)
+    return participant
+
+
+@router.patch("/me/preferences", response_model=ParticipantResponse)
+def update_my_preferences(
+    data: ParticipantPreferencesUpdate,
+    participant: ParticipantDep,
+    session: SessionDep,
+) -> Participant:
+    participant.include_selfies = data.include_selfies
+    participant.include_screenshots = data.include_screenshots
     session.commit()
     session.refresh(participant)
     return participant

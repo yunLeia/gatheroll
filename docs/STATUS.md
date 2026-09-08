@@ -54,6 +54,12 @@ Updated: 2026-09-07
   console and an on-phone panel, capped at 100 entries, no remote collection or secrets.
   Logs preparation, PUT/complete/retry, restored list count and page lifecycle signals.
   Step summary: docs/reports/003-private-photo-intake.md.
+- Participant-scoped upload preferences: `include_selfies` (default true) and
+  `include_screenshots` (default false) stored on participants. Self-scoped PATCH
+  endpoint (no participant ID in path, bearer token identity). Frontend
+  PreferencesPanel step gated on selected photos and local preferencesConfirmed
+  state, not re-asked every batch. Preferences stored but not yet enforced by
+  any automatic filtering. ADR 006 and Korean learning note 005 added.
 
 ## Verified
 - Current correction: web lint/typecheck/**32 tests**/production build and backend
@@ -85,6 +91,21 @@ Updated: 2026-09-07
   Remote web/API CI passed: https://github.com/yunLeia/gatheroll/actions/runs/34072793840
   (lint/typechecks/tests/build and clean PostgreSQL migrations). Existing Actions
   Node runtime deprecation annotations were non-failing; workflow upgrade is separate.
+- Preferences slice: Backend 6 PostgreSQL tests passed (test_preferences.py):
+  defaults (selfies true, screenshots false), update/persistence, payload
+  validation (both fields required, unknown fields rejected), pending
+  participant access, cross-participant isolation, and photo endpoint smoke
+  test. Backend Ruff/mypy passed, and the full 58/58 PostgreSQL test suite
+  passed (52 prior + 6 new), not just the 6 new tests. Frontend lint,
+  typecheck, test, and build were all clean; PreferencesPanel and
+  intake-panel integration with preferencesConfirmed state verified locally.
+  Existing API TestClient deprecation warnings unchanged. Implementation
+  commits 84b5cf3 (backend) and 006d55f (frontend) on branch; this slice
+  follows the same patterns and does not modify existing routes.
+- Migration 0005's chain (0001→0002→0003→0005) was verified to resolve
+  cleanly and `alembic check` reported no drift, using an isolated
+  disposable Postgres schema inside `gatheroll_test` (not the shared
+  dev/test database, which is owned by a concurrent session).
 - Development diagnostic panel verified in the LAN browser with a synthetic
   participant: list_loaded count shown without credentials, filenames or URLs.
 - User-reported physical iPhone/Safari check: QR participation → approval → photo
@@ -150,6 +171,9 @@ Updated: 2026-09-07
   no POST idempotency keys; photo initialization has scoped client UUID idempotency.
 - Legacy events with NULL manage_token_hash remain readable but unmanageable.
 - Docker is still unavailable locally. Python dependencies remain version ranges.
+- Migration 0005 branches from 0003, not 0004: a concurrent, unrelated task in
+  another session already claims revision id "0004" for a different migration.
+  An `alembic merge` will be needed once that migration lands on this branch.
 
 ## Next step
 Align development LAN URLs/origins with the current IP before phone recheck (currently
@@ -157,4 +181,11 @@ Align development LAN URLs/origins with the current IP before phone recheck (cur
 real batches by human gathering context and evaluate all-selected. Do not tune historical
 time/GPS membership thresholds further or integrate them into production. Only later
 consider visual/context improvement over participant selection, with privacy confirmation.
-Commit/push/remote CI require a follow-up request; uploaded samples are not automatically eval data.
+
+Separately, upload preferences are now stored and surfaced in the UI but not yet
+enforced by any automatic filtering. The next product slice on that track is a
+multi-label shared album: allow approved participants to tag their uploaded
+photos with labels (e.g. "group", "landmarks", "food"), share tagged photos to
+an album view only other approved participants of the same event can see, and
+explore grouping by label. Evaluate the album view with user feedback before
+building AI classification/filtering.

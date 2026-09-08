@@ -59,6 +59,14 @@ class ParticipantResponse(BaseModel):
     status: ParticipantStatus
     joined_at: datetime
     approved_at: datetime | None
+    include_selfies: bool
+    include_screenshots: bool
+
+
+class ParticipantPreferencesUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    include_selfies: bool
+    include_screenshots: bool
 
 
 class ParticipantJoined(BaseModel):

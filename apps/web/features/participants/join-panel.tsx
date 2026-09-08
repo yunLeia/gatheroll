@@ -144,8 +144,14 @@ export function JoinPanel({ event }: { event: EventInfo }) {
           </p>
         </>
       )}
-      {participant?.status === "approved" && token && !invalid && (
-        <IntakePanel key={share} share={share} token={token} />
+      {participant && participant.status === "approved" && token && !invalid && (
+        <IntakePanel
+          key={share}
+          share={share}
+          token={token}
+          participant={participant}
+          onPreferencesUpdated={setParticipant}
+        />
       )}
       {!persistent && (
         <p role="status" className="mt-4 text-sm text-caution">

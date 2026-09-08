@@ -2,10 +2,12 @@
 
 import { useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
 import { Button } from "@/components/ui/button";
+import { api, type Participant, type ParticipantPreferences } from "@/lib/api";
 import { photoApi } from "./api";
 import { DiagnosticPanel } from "./diagnostic-panel";
 import { recordDiagnostic, tracePhotoStep } from "./diagnostics";
 import { preparePhoto } from "./prepare";
+import { PreferencesPanel } from "./preferences-panel";
 import { selectionError } from "./selection";
 import { putObject, uploadBatch, UPLOAD_CONCURRENCY } from "./upload";
 import type { PhotoJob, PhotoLimits, StoredPhoto } from "./types";
@@ -37,9 +39,13 @@ function Preview({ url, name }: { url: string | null; name: string }) {
 export function IntakePanel({
   share,
   token,
+  participant,
+  onPreferencesUpdated,
 }: {
   share: string;
   token: string;
+  participant: Participant;
+  onPreferencesUpdated: (participant: Participant) => void;
 }) {
   const service = useMemo(() => photoApi(share, token), [share, token]);
   const picker = useRef<HTMLInputElement>(null);
@@ -59,6 +65,8 @@ export function IntakePanel({
   const [notice, setNotice] = useState("");
   const [measurement, setMeasurement] = useState("");
   const [reload, setReload] = useState(0);
+  const [preferencesConfirmed, setPreferencesConfirmed] = useState(false);
+  const [savingPreferences, setSavingPreferences] = useState(false);
 
   function replaceJobs(next: PhotoJob[]) {
     jobsRef.current = next;
@@ -288,6 +296,25 @@ export function IntakePanel({
     }
   }
 
+  async function savePreferences(prefs: ParticipantPreferences) {
+    setSavingPreferences(true);
+    setError("");
+    try {
+      const updated = await api.updatePreferences(share, token, prefs);
+      onPreferencesUpdated(updated);
+      setPreferencesConfirmed(true);
+    } catch {
+      // Preferences are supplementary metadata, never a gate on uploading:
+      // still let the participant proceed even though the save failed.
+      setPreferencesConfirmed(true);
+      setError(
+        "We couldn’t save your preferences, but you can still upload. You can try setting them again later.",
+      );
+    } finally {
+      if (alive.current) setSavingPreferences(false);
+    }
+  }
+
   async function loadMore() {
     if (nextOffset === null || listing) return;
     setListing(true);
@@ -405,7 +432,17 @@ export function IntakePanel({
               </div>
             ))}
           </div>
-          {selected > 0 && (
+          {selected > 0 && !preferencesConfirmed && (
+            <PreferencesPanel
+              initial={{
+                include_selfies: participant.include_selfies,
+                include_screenshots: participant.include_screenshots,
+              }}
+              busy={savingPreferences}
+              onContinue={savePreferences}
+            />
+          )}
+          {selected > 0 && preferencesConfirmed && (
             <div className="sticky bottom-0 bg-background py-3 pb-[max(12px,env(safe-area-inset-bottom))]">
               <Button size="lg" disabled={busy} onClick={upload}>
                 {busy
