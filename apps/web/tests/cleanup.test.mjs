@@ -3,6 +3,8 @@ import test from "node:test";
 import { createRequire } from "node:module";
 const require = createRequire(import.meta.url);
 const { computeBlurScore, possiblyBlurry } = require("../.eval-build/features/cleanup/blur.js");
+const { validateCleanupDataset } = require("../.eval-build/evaluation/cleanup-dataset.js");
+const { binaryMetrics } = require("../.eval-build/evaluation/cleanup-reporting.js");
 
 function solid(width, height, value) {
   const data = new Uint8ClampedArray(width * height * 4).fill(value);
@@ -42,4 +44,29 @@ test("possiblyBlurry compares against the configured threshold, exclusive bounda
   assert.equal(possiblyBlurry(50, config), true);
   assert.equal(possiblyBlurry(100, config), false);
   assert.equal(possiblyBlurry(150, config), false);
+});
+
+test("binaryMetrics computes precision/recall/fpr for boolean labels, null denominator never 0", () => {
+  const m = binaryMetrics([
+    { label: true, predicted: true }, { label: true, predicted: false },
+    { label: false, predicted: true }, { label: false, predicted: false },
+  ]);
+  assert.equal(m.tp, 1); assert.equal(m.fn, 1); assert.equal(m.fp, 1); assert.equal(m.tn, 1);
+  assert.equal(m.precision, 0.5); assert.equal(m.recall, 0.5);
+  assert.equal(binaryMetrics([]).precision, null);
+});
+
+test("cleanup dataset validation requires photo_id/source_file/notes and rejects unknown fields", () => {
+  const valid = { schema_version: 1, dataset_version: "local-v1", examples: [
+    { photo_id: "a", source_file: "a.jpg", notes: "sharp indoor photo", is_blurry: false, is_screenshot: null, is_selfie: null },
+  ] };
+  assert.doesNotThrow(() => validateCleanupDataset(valid));
+  const missingNotes = structuredClone(valid);
+  missingNotes.examples[0].notes = "";
+  assert.throws(() => validateCleanupDataset(missingNotes));
+  const extraField = structuredClone(valid);
+  extraField.examples[0].unexpected = 1;
+  assert.throws(() => validateCleanupDataset(extraField));
+  const duplicateId = { ...valid, examples: [valid.examples[0], valid.examples[0]] };
+  assert.throws(() => validateCleanupDataset(duplicateId));
 });

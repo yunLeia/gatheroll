@@ -10,6 +10,7 @@
     "typecheck": "tsc --noEmit",
     "eval:build": "tsc -p tsconfig.eval.json",
     "eval": "npm run eval:build && node .eval-build/evaluation/cli.js",
+    "eval:cleanup": "npm run eval:build && node .eval-build/evaluation/cleanup-cli.js",
     "pretest": "npm run eval:build",
     "test": "node --test tests/*.test.mjs"
   },
@@ -27,6 +28,7 @@
     "@types/react-dom": "19.2.7",
     "eslint": "9.39.5",
     "eslint-config-next": "16.3.4",
+    "sharp": "^0.35.4",
     "tailwindcss": "4.3.3",
     "typescript": "6.0.3"
   }
