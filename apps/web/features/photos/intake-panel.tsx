@@ -61,6 +61,7 @@ export function IntakePanel({
   const [nextOffset, setNextOffset] = useState<number | null>(null);
   const [busy, setBusy] = useState(false);
   const [listing, setListing] = useState(false);
+  const [listLoaded, setListLoaded] = useState(false);
   const [preparing, setPreparing] = useState("");
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
@@ -87,6 +88,10 @@ export function IntakePanel({
 
   useEffect(() => {
     const controller = new AbortController();
+    // Reload (share/token change, visibility return, manual refresh) should
+    // show the loading state again, not the stale previous list/empty state.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setListLoaded(false);
     service
       .limits(controller.signal)
       .then((result) => {
@@ -99,13 +104,15 @@ export function IntakePanel({
         recordDiagnostic("list_loaded", { count: page.photos.length });
         setNextOffset(page.next_offset);
         setError("");
+        setListLoaded(true);
       })
       .catch(() => {
-        if (!controller.signal.aborted) recordDiagnostic("list_failed");
-        if (!controller.signal.aborted)
-          setError(
-            "Photo storage is unavailable. Check your connection or ask the organizer to configure storage.",
-          );
+        if (controller.signal.aborted) return;
+        recordDiagnostic("list_failed");
+        setError(
+          "Photo storage is unavailable. Check your connection or ask the organizer to configure storage.",
+        );
+        setListLoaded(true);
       });
     // Signed previews expire. Reauthorize on return, without polling in the background.
     const visible = () => {
@@ -383,6 +390,11 @@ export function IntakePanel({
       >
         Add photos
       </Button>
+      {!limits && !error && (
+        <p role="status" className="text-xs text-muted-foreground">
+          Loading photo settings…
+        </p>
+      )}
       {limits && (
         <p className="text-xs text-muted-foreground">
           Up to {limits.batch_limit} photos per batch ·{" "}
@@ -511,7 +523,12 @@ export function IntakePanel({
         <p className="text-sm text-muted-foreground">
           Stored privately · Unreviewed
         </p>
-        {!stored.length && (
+        {!listLoaded && !error && (
+          <p role="status" className="text-sm text-muted-foreground">
+            Loading your uploads…
+          </p>
+        )}
+        {listLoaded && !stored.length && (
           <p className="text-sm text-muted-foreground">
             Confirmed uploads will appear here.
           </p>
