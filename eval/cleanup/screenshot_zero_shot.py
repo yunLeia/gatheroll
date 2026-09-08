@@ -1,9 +1,15 @@
 #!/usr/bin/env python3
-"""SigLIP2 zero-shot baseline for the selfie-detection experiment.
+"""SigLIP2 zero-shot baseline for the screenshot-detection experiment.
 
 Reads only local files named in the manifest. Never uploads or transmits
 images. Uses a pretrained SigLIP2 checkpoint's image and text encoders
 directly (zero-shot) -- no fine-tuning, no training loop.
+
+Added because the metadata/format heuristic (isLikelyScreenshot) measured
+0% recall on a real 49-photo labeled set: real screenshots correctly had
+content_type image/png, but their actual device resolution was not in the
+hardcoded known_dimensions list. This baseline is content-based instead of
+enumeration-based, so it does not share that failure mode.
 """
 
 import argparse
@@ -13,12 +19,9 @@ from pathlib import Path
 
 DEFAULT_MODEL = "google/siglip2-base-patch16-224"
 
-# Prompt wording matters for zero-shot quality; these three are deliberately
-# mutually exclusive framings of "who is this photo of, from whose camera."
 PROMPTS = {
-    "selfie": "a selfie photograph taken by the person who appears in it, arm's length or mirror",
-    "portrait_by_other": "a portrait photograph of one person, taken by someone else holding the camera",
-    "group_photo": "a group photo of multiple people posing together",
+    "screenshot": "a screenshot of a mobile app or phone screen",
+    "camera_photo": "a natural photograph taken with a camera",
 }
 
 
@@ -85,9 +88,13 @@ def main() -> None:
 
     args.out.parent.mkdir(parents=True, exist_ok=True)
     args.out.write_text(
-        json.dumps({"model": args.model, "prompts": PROMPTS, "results": results, "undecodable": undecodable}, indent=2) + "\n"
+        json.dumps(
+            {"model": args.model, "prompts": PROMPTS, "results": results, "undecodable": undecodable},
+            indent=2,
+        )
+        + "\n"
     )
-    print(f"Wrote {len(results)} zero-shot results to {args.out}", file=sys.stderr)
+    print(f"Wrote {len(results)} zero-shot results ({len(undecodable)} undecodable) to {args.out}", file=sys.stderr)
 
 
 if __name__ == "__main__":

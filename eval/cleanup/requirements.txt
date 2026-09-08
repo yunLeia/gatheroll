@@ -2,3 +2,4 @@ opencv-python-headless>=4.10,<5
 transformers>=4.45,<5
 torch>=2.4,<3
 pillow>=10,<12
+pillow-heif>=1.7,<2
