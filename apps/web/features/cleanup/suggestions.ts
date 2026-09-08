@@ -1,5 +1,5 @@
 import { possiblyBlurry, type CleanupConfig } from "./blur";
-import { groupExactDuplicates } from "./duplicates";
+import { alreadyUploadedIds, groupExactDuplicates } from "./duplicates";
 
 // Provisional threshold, matching eval/config/cleanup-blur-v1.json and the
 // value measured in docs/reports/007-cleanup-v1-real-evaluation.md (100%
@@ -16,15 +16,24 @@ export const CLEANUP_CONFIG: CleanupConfig = {
 export type CleanupSuggestions = {
   blurryIds: Set<string>;
   duplicateGroups: string[][];
+  alreadyUploadedIds: Set<string>;
 };
 
-type SuggestionInput = { client_id: string; blur_score: number | null; content_hash: string | null };
+type SuggestionInput = {
+  client_id: string;
+  blur_score: number | null;
+  content_hash: string | null;
+  original_filename: string;
+  file_size_bytes: number;
+};
+type StoredInput = { original_filename: string; file_size_bytes: number };
 
 // Pre-upload, suggest-only signal computed from data already produced by
 // preparePhoto() -- never a new score, never auto-excludes anything. The
 // caller decides what to do with a flagged photo (docs/adr/007).
 export function cleanupSuggestions(
   inputs: SuggestionInput[],
+  stored: StoredInput[] = [],
   config: CleanupConfig = CLEANUP_CONFIG,
 ): CleanupSuggestions {
   const blurryIds = new Set(
@@ -36,5 +45,9 @@ export function cleanupSuggestions(
     .filter((input): input is SuggestionInput & { content_hash: string } => input.content_hash !== null)
     .map((input) => ({ id: input.client_id, content_hash: input.content_hash }));
   const duplicateGroups = [...groupExactDuplicates(hashed).values()];
-  return { blurryIds, duplicateGroups };
+  return {
+    blurryIds,
+    duplicateGroups,
+    alreadyUploadedIds: alreadyUploadedIds(inputs, stored),
+  };
 }

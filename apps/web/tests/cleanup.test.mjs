@@ -180,6 +180,7 @@ test("cleanupSuggestions flags photos with a blur_score below the configured thr
       { client_id: "a", blur_score: 50, content_hash: null },
       { client_id: "b", blur_score: 150, content_hash: null },
     ],
+    [],
     config,
   );
   assert.deepEqual([...r.blurryIds], ["a"]);
@@ -187,6 +188,7 @@ test("cleanupSuggestions flags photos with a blur_score below the configured thr
 test("cleanupSuggestions never flags a null blur_score (not yet computed, never fabricated)", () => {
   const r = cleanupSuggestions(
     [{ client_id: "a", blur_score: null, content_hash: null }],
+    [],
     { version: "v", blur_threshold: 100 },
   );
   assert.equal(r.blurryIds.size, 0);
@@ -199,9 +201,32 @@ test("cleanupSuggestions groups exact-duplicate content hashes, ignores null has
       { client_id: "c", blur_score: null, content_hash: null },
       { client_id: "d", blur_score: null, content_hash: "h2" },
     ],
+    [],
     { version: "v", blur_threshold: 100 },
   );
   assert.deepEqual(r.duplicateGroups, [["a", "b"]]);
+});
+test("cleanupSuggestions flags a selection matching an already-uploaded photo by filename+size", () => {
+  const r = cleanupSuggestions(
+    [
+      {
+        client_id: "a",
+        blur_score: null,
+        content_hash: null,
+        original_filename: "IMG_1.JPG",
+        file_size_bytes: 100,
+      },
+      {
+        client_id: "b",
+        blur_score: null,
+        content_hash: null,
+        original_filename: "IMG_2.JPG",
+        file_size_bytes: 200,
+      },
+    ],
+    [{ original_filename: "IMG_1.JPG", file_size_bytes: 100 }],
+  );
+  assert.deepEqual([...r.alreadyUploadedIds], ["a"]);
 });
 test("cleanupSuggestions defaults to CLEANUP_CONFIG when no config is passed", () => {
   const r = cleanupSuggestions([
@@ -210,7 +235,18 @@ test("cleanupSuggestions defaults to CLEANUP_CONFIG when no config is passed", (
   assert.equal(r.blurryIds.has("a"), true);
 });
 
-const { groupExactDuplicates } = require("../.eval-build/features/cleanup/duplicates.js");
+const { groupExactDuplicates, alreadyUploadedIds } = require("../.eval-build/features/cleanup/duplicates.js");
+
+test("alreadyUploadedIds matches on filename+size, ignores non-matches, empty stored", () => {
+  const selected = [
+    { client_id: "a", original_filename: "x.jpg", file_size_bytes: 10 },
+    { client_id: "b", original_filename: "x.jpg", file_size_bytes: 20 },
+    { client_id: "c", original_filename: "y.jpg", file_size_bytes: 10 },
+  ];
+  const stored = [{ original_filename: "x.jpg", file_size_bytes: 10 }];
+  assert.deepEqual([...alreadyUploadedIds(selected, stored)], ["a"]);
+  assert.equal(alreadyUploadedIds(selected, []).size, 0);
+});
 
 test("groupExactDuplicates groups items sharing a hash and omits singletons", () => {
   const items = [

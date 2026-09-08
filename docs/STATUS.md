@@ -321,6 +321,27 @@ Updated: 2026-09-08
   against the local DB; not a code bug. Hit and resolved this way during suggest-only
   blur/duplicate badge browser verification (2026-09-08).
 
+- **Cross-batch "already uploaded" duplicate detection added (2026-09-08):**
+  a real phone report ("selected the same photo twice, no duplicate flag")
+  traced to a real gap, not a broken model: `groupExactDuplicates`
+  (`content_hash`, exact SHA-256) only ever compared photos *within the
+  current not-yet-uploaded selection* -- it never checked a new selection
+  against photos already confirmed-uploaded in an earlier batch, since the
+  comparison set was `jobs.filter(state !== "uploaded")`. Can't reuse
+  content-hash matching for that path (the server deliberately never
+  stores `content_hash`, per ADR 007's scope notes), so added a second,
+  weaker-but-deterministic proxy: `alreadyUploadedIds()`
+  (`apps/web/features/cleanup/duplicates.ts`) matches a new selection
+  against `stored` by `(original_filename, file_size_bytes)`, both of
+  which the server already returns from `GET /photos` and just weren't
+  surfaced in the frontend's `StoredPhoto` type. New badge, distinct from
+  "Possible duplicate": "Matches a photo you already uploaded". Verified
+  end-to-end in a live browser: uploaded a photo, re-added the identical
+  file in a separate "Add photos" action, badge appeared correctly.
+  Regression tests added at both the `alreadyUploadedIds` and
+  `cleanupSuggestions` level. Near-duplicate (different-but-similar
+  photos) remains explicitly out of scope, unchanged.
+
 ## Next step
 **Host photo gallery v1 proposed** (`docs/product/host-photo-gallery-v1-proposal.md`,
 2026-09-08): the original brief ranks "working shared album without AI"

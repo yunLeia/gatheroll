@@ -352,8 +352,9 @@ export function IntakePanel({
     () =>
       cleanupSuggestions(
         jobs.filter((job) => job.state !== "uploaded").map((job) => job.input),
+        stored,
       ),
-    [jobs],
+    [jobs, stored],
   );
   const duplicateGroupOf = useMemo(() => {
     const map = new Map<string, { size: number }>();
@@ -365,6 +366,7 @@ export function IntakePanel({
   const suggestedCount = new Set([
     ...suggestions.blurryIds,
     ...duplicateGroupOf.keys(),
+    ...suggestions.alreadyUploadedIds,
   ]).size;
   return (
     <div className="mt-6 min-w-0 space-y-6">
@@ -438,6 +440,16 @@ export function IntakePanel({
             {jobs.map((job) => {
               const isBlurry = suggestions.blurryIds.has(job.input.client_id);
               const duplicateGroup = duplicateGroupOf.get(job.input.client_id);
+              const isAlreadyUploaded = suggestions.alreadyUploadedIds.has(
+                job.input.client_id,
+              );
+              const flags = [
+                isBlurry && "Possibly blurry",
+                duplicateGroup &&
+                  `Possible duplicate · matches ${duplicateGroup.size - 1} other selected photo${duplicateGroup.size - 1 === 1 ? "" : "s"}`,
+                isAlreadyUploaded &&
+                  "Matches a photo you already uploaded",
+              ].filter(Boolean);
               return (
                 <div
                   key={job.input.client_id}
@@ -453,13 +465,9 @@ export function IntakePanel({
                   <p className="px-2 py-1 text-xs">
                     {job.state === "uploaded" ? "Stored privately" : job.state}
                   </p>
-                  {job.state !== "uploaded" && (isBlurry || duplicateGroup) && (
+                  {job.state !== "uploaded" && flags.length > 0 && (
                     <p className="px-2 pb-1 text-xs text-caution">
-                      {isBlurry && duplicateGroup
-                        ? `Possibly blurry · matches ${duplicateGroup.size - 1} other selected photo${duplicateGroup.size - 1 === 1 ? "" : "s"}`
-                        : isBlurry
-                          ? "Possibly blurry"
-                          : `Possible duplicate · matches ${duplicateGroup!.size - 1} other selected photo${duplicateGroup!.size - 1 === 1 ? "" : "s"}`}
+                      {flags.join(" · ")}
                     </p>
                   )}
                   {job.error && (
