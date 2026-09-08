@@ -1,8 +1,38 @@
 # Gatheroll status
 
-Updated: 2026-09-07
+Updated: 2026-09-08
 
 ## Implemented
+- **AI direction pivot (ADR 007, 2026-09-08):** event relevance is no longer a V1
+  AI target. Participant selection is trusted as relevance directly. AI investment
+  moves to pre-upload cleanup (screenshot/selfie/blur detection, suggest-only),
+  shared-album multi-label filters, and download exclusion of a participant's own
+  uploads. A SigLIP2 embedding-similarity relevance experiment was designed and
+  implemented (local embedding generator with caching/versioning, centroid/
+  nearest-neighbor/top-k mean baselines) on branch `relevance-embeddings` before
+  this correction, before any real labels were collected. Kept unmerged as
+  experimental history, not deleted — see ADR 007's branch-disposition section for
+  what's reusable (the embedding generator/caching pattern) versus relevance-
+  specific (the scoring baselines, the belongs/does_not_belong labeling scheme).
+  See also [learning note 006](learning/006-vision-ai-direction-pivot.md).
+- **Pre-upload Cleanup v1** (report 006, eval guide 003, learning note 007):
+  four deterministic-where-possible signals, each the simplest suitable
+  technique for its own problem, not one model forced onto all four. Blur
+  (Laplacian variance, no model) and screenshot (format/dimension/EXIF
+  heuristic, no model) compute in the browser during `preparePhoto()` and
+  expose `blur_score`/`is_likely_screenshot` on `PhotoJob` — data only, no
+  review/exclude UI yet. Exact-duplicate detection (SHA-256 content hash,
+  `apps/web/features/cleanup/duplicates.ts`) is deterministic with no
+  accuracy question at all; near-duplicate (pHash/embedding) stays
+  explicitly deferred. Selfie detection stays **offline-only**: two
+  pretrained baselines (OpenCV Haar Cascade face geometry vs. SigLIP2
+  zero-shot, `eval/cleanup/`) are compared, not shipped — browser-vs-backend
+  and any production threshold remain open, evidence-gated decisions.
+  Offline evaluation reuses a new minimal per-photo `CleanupExample` schema
+  (`apps/web/evaluation/cleanup-dataset.ts`) and `npm run eval:cleanup`
+  (`--detector blur|screenshot|selfie|duplicates`) — deliberately not the
+  event-relevance harness's shapes (ADR 007: single-photo properties, not
+  cross-photo comparisons).
 - Product correction (ADR 005): participant selection is the first relevance filter;
   exact host boundaries are not membership criteria. Time/GPS are weak context only.
 - Create/API/header: name, optional event_date/location, join policy. Retired starts_at/
@@ -62,6 +92,34 @@ Updated: 2026-09-07
   any automatic filtering. ADR 006 and Korean learning note 005 added.
 
 ## Verified
+- Pre-upload Cleanup v1: web lint/typecheck/build clean after each of the 4
+  detector slices; **50/50 tests passing** (18 new in `cleanup.test.mjs`).
+  Smoke evidence only, not accuracy metrics (full detail in report 006):
+  blur correctly separated a synthetic solid-color image (score 0) from
+  synthetic random noise (score 51,226.99); screenshot heuristic correctly
+  classified a synthetic iPhone-resolution PNG vs. a synthetic camera-
+  resolution JPEG; the selfie face-heuristic found 10 low-confidence false
+  detections (largest 0.12% of frame) on one real photo and could not
+  decode a real HEIC file at all (OpenCV limitation), while SigLIP2
+  zero-shot correctly predicted "selfie" on the same JPEG; exact-duplicate
+  detection correctly grouped a real photo with a byte-identical copy and
+  found **zero duplicate groups across the real local 169-photo set**
+  (a real measurement, not a smoke test — duplicate detection has no
+  accuracy question to smoke-test in the first place).
+- **Pre-upload Cleanup v1: first real accuracy numbers** (report 007, real
+  49-photo labeled set). Screenshot metadata heuristic measured **0%
+  recall** (real screenshots' actual resolution, 1206×2622, wasn't in the
+  hardcoded `known_dimensions` list) — retired as a production candidate,
+  not scheduled for further tuning. A new content-based SigLIP2 zero-shot
+  baseline (`screenshot_zero_shot.py`) measured **100% recall / 85.7%
+  precision** on the same set (all 4 false positives were blurry camera
+  photos). Separately, `sharp` failed to decode 15/15 real labeled HEIC
+  files (`heif: Decoder plugin generated an error`, a systematic
+  environment limitation) — fixed with an eval-only `sips`-based JPEG
+  cache bridge that never touches original files; after the fix, blur
+  scoring covers the full 49-photo set (100% recall / 61.5% precision at
+  the still-placeholder `blur_threshold=100`) instead of silently
+  excluding 31% of it.
 - Current correction: web lint/typecheck/**32 tests**/production build and backend
   Ruff/mypy/**61 PostgreSQL tests** passed. Local dev/test Alembic check: no drift.
 - Migration 0004 applied locally: all pre-existing values of **10 events, 6 participants,
@@ -106,6 +164,10 @@ Updated: 2026-09-07
   cleanly and `alembic check` reported no drift, using an isolated
   disposable Postgres schema inside `gatheroll_test` (not the shared
   dev/test database, which is owned by a concurrent session).
+- Resolved: migration 0004 (optional event context) and 0005 (upload
+  preferences) both branched from 0003 independently; merged with
+  `alembic merge` into 0006. Single head confirmed (`alembic heads` reports
+  only `0006`); local `gatheroll`/`gatheroll_test` upgraded to it cleanly.
 - Development diagnostic panel verified in the LAN browser with a synthetic
   participant: list_loaded count shown without credentials, filenames or URLs.
 - User-reported physical iPhone/Safari check: QR participation → approval → photo
@@ -171,21 +233,24 @@ Updated: 2026-09-07
   no POST idempotency keys; photo initialization has scoped client UUID idempotency.
 - Legacy events with NULL manage_token_hash remain readable but unmanageable.
 - Docker is still unavailable locally. Python dependencies remain version ranges.
-- Migration 0005 branches from 0003, not 0004: a concurrent, unrelated task in
-  another session already claims revision id "0004" for a different migration.
-  An `alembic merge` will be needed once that migration lands on this branch.
 
 ## Next step
-Align development LAN URLs/origins with the current IP before phone recheck (currently
-172.16.29.99; do not assume it stays fixed). Then collect/label intentionally selected
-real batches by human gathering context and evaluate all-selected. Do not tune historical
-time/GPS membership thresholds further or integrate them into production. Only later
-consider visual/context improvement over participant selection, with privacy confirmation.
+**Pre-upload Cleanup v1 code is implemented** (blur, screenshot × 2
+baselines, selfie comparison, exact duplicates); **real measurement now
+exists for blur and screenshot** (report 007, real 49-photo set) — selfie
+still only has the report 006 plumbing check, not a real-set precision/
+recall run. n=49 is a real measurement, not synthetic, but still small
+relative to the 100–250 reference scale the earlier relevance-labeling
+guide used — treat current numbers as a start, not a final answer, and
+grow the labeled set before making any production call. No production/
+browser-vs-backend decision exists yet for any of the four signals, and no
+review/exclude UI exists yet either — that's the deliberate next slice
+after real numbers exist, not before. Explicitly still out of scope: event
+relevance, clustering, shared-album classification, near-duplicate
+(pHash/embedding) detection, storing the content hash server-side for the
+future download-exclude promise, external vision APIs, and download ZIP
+infrastructure.
 
-Separately, upload preferences are now stored and surfaced in the UI but not yet
-enforced by any automatic filtering. The next product slice on that track is a
-multi-label shared album: allow approved participants to tag their uploaded
-photos with labels (e.g. "group", "landmarks", "food"), share tagged photos to
-an album view only other approved participants of the same event can see, and
-explore grouping by label. Evaluate the album view with user feedback before
-building AI classification/filtering.
+Align development LAN URLs/origins with the current IP before phone recheck
+(currently 172.16.29.99; do not assume it stays fixed) — unrelated infrastructure
+follow-up, independent of the AI direction above.

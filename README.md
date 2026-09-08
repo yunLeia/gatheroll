@@ -2,9 +2,10 @@
 
 **A shared album that fills itself.**
 
-Gatheroll is a mobile-first shared photo album that explores whether event
-context and visual similarity can reduce post-event photo sharing to a QR scan,
-one broad photo selection, and a privacy-aware confirmation step.
+Gatheroll is a mobile-first shared photo album that explores whether AI applied
+to cleanup, organization, and download — not to re-deriving which photos belong
+to the event — can reduce post-event photo sharing to a QR scan, one broad photo
+selection, and a privacy-aware confirmation step.
 
 This repository is being built as a production-minded Product Engineer / AI
 Product Engineer portfolio project. It is intentionally incremental: first make
@@ -33,19 +34,31 @@ private or unrelated images.
 Host creates an event
 → friends join from a QR code without an account
 → each person selects everything from around the event
-→ Gatheroll recommends what belongs
-→ uncertain photos require review
-→ approved originals appear in one shared album
+→ Gatheroll cleans up and organizes the shared collection
+→ each person downloads only what they don't already have
 ```
 
-Participants' explicit broad selection is the first relevance filter. Hosts do not
-need precise event boundaries: name, optional date/location, and join policy suffice.
-Future relevance is primarily visual/contextual; time/GPS are weak supporting metadata,
-not ground truth or membership gates. See the [current product model](docs/product/event-relevance.md).
+**Participants' explicit broad selection is trusted as event relevance directly —
+Gatheroll does not run AI to re-derive whether a selected photo belongs.**
+[ADR 007](docs/adr/007-cleanup-first-ai-direction.md) explains why: participants
+already state event intent by selecting; re-deriving that visually would spend
+real engineering cost re-solving a problem the product's own input step already
+settled. Hosts still don't need precise event boundaries: name, optional
+date/location, and join policy suffice. An earlier visual/contextual relevance
+hypothesis (see the [historical product model](docs/product/event-relevance.md))
+was explored as an embedding-similarity experiment and superseded before real
+labeling began — preserved as history, not current direction; see
+[the pivot learning note](docs/learning/006-vision-ai-direction-pivot.md).
 
-Gatheroll's event detection will be **precision-first**: a false positive can
-expose a private photo, while a false negative is inconvenient but recoverable.
-The system recommends; the person sharing has final control.
+Gatheroll's AI/vision investment now targets, in order: **pre-upload cleanup**
+(screenshot/selfie/low-quality detection on a participant's own selection, AI
+suggests and the participant decides include/exclude), **shared-album
+organization** (multi-label smart filters — `People`/`Selfies`/`Food`/`Scenery`/
+`Candid` as filters over one collection, not folders; a photo can carry several
+labels), and **download** (skip photos the current participant already
+contributed). Each of these acts after relevance is already settled by the
+participant's own selection, where AI removes clearer, narrower, more verifiable
+manual work instead of re-deciding something the user already decided.
 
 ## Current status
 
@@ -73,15 +86,19 @@ Originals and thumbnails are private objects, not automatically shared photos.
 
 ## Evaluation
 
-Evaluation harness implemented; golden dataset collection in progress.
-The default offline baseline is **all user-selected candidates**; exact event times
-are not required. JSON/CSV metrics and per-photo error reports are available. Earlier
-time/time+GPS experiments and their 20 synthetic examples remain opt-in historical
-comparisons of a rejected primary product assumption, not current architecture or
-real-photo performance claims. No further time-threshold tuning is planned.
-Production still does **not** classify, share, hide or delete photos automatically.
-See the [evaluation guide](eval/README.md), [labeling rules](docs/eval/event-relevance-labeling.md)
-and [baseline report](docs/reports/004-metadata-baseline.md).
+The offline evaluation harness (`eval/`, `apps/web/evaluation/`) was built to
+measure event-relevance baselines (all-selected / time / time+GPS, then a SigLIP
+embedding-similarity experiment). That direction is superseded — see
+[ADR 007](docs/adr/007-cleanup-first-ai-direction.md) — but the harness itself
+(dataset schema, metrics contract, CLI) is reusable infrastructure for the next
+evaluation target: pre-upload cleanup detectors (screenshot/selfie/blur). All
+prior relevance results remain in the repository as measured, dated history, not
+deleted or rewritten: [labeling rules](docs/eval/event-relevance-labeling.md),
+[metadata baseline report](docs/reports/004-metadata-baseline.md), and the
+embedding experiment design (on the unmerged `relevance-embeddings` branch — see
+ADR 007's branch-disposition section for what's reusable from it). No further
+relevance threshold tuning is planned. Production still does **not** classify,
+share, hide, or delete photos automatically.
 
 ## Architecture
 
@@ -393,24 +410,32 @@ GitHub Actions runs the same checks for pushes to `main` and pull requests.
 
 ## Architectural decisions
 
-(ADR 005 is reserved by concurrent work not yet merged into this branch.)
-
 - [ADR 001: Use the web as Gatheroll's universal participation layer](docs/adr/001-web-first.md)
 - [ADR 002: Event persistence](docs/adr/002-event-persistence.md)
 - [ADR 003: Event access and no-account authorization](docs/adr/003-event-access-and-no-account-authorization.md)
 - [ADR 004: Private photo intake lifecycle](docs/adr/004-private-photo-intake-lifecycle.md)
+- [ADR 005: Host-defined event boundaries are not required for relevance](docs/adr/005-event-boundaries-are-not-membership.md)
 - [ADR 006: Participant-scoped upload preferences](docs/adr/006-participant-scoped-upload-preferences.md)
+- [ADR 007: Trust participant selection as event relevance; move AI to cleanup, organization, and download](docs/adr/007-cleanup-first-ai-direction.md)
 
 ## Intentionally not built yet
 
 Redis, background workers, pgvector, a separate vector database, native apps,
-accounts, facial recognition, and multimodal LLM analysis are outside this
-foundation. Each should enter the architecture only when a product need or
-measurement justifies it.
+accounts, and facial recognition are outside this foundation. Also explicitly
+deferred as of [ADR 007](docs/adr/007-cleanup-first-ai-direction.md)'s
+cleanup-first AI direction: event-relevance AI of any kind (embedding
+similarity, clustering), shared-album multi-label classification, exact/near-
+duplicate (pHash) detection, download ZIP infrastructure, and any OpenAI/
+Anthropic API calls — each is a candidate for a later slice, not this one.
+Each should enter the architecture only when a product need or measurement
+justifies it.
 
 ## Next vertical slice
 
-The core iPhone/Safari QR + upload + refresh flow is user-confirmed. Finish remaining
-device edge-case checks and remote CI, and address any measured issues.
-Then establish a small consented golden dataset, labeling rules and a metadata-only
-event-relevance baseline. Do not add sophisticated AI or a shared album yet.
+The core iPhone/Safari QR + upload + refresh flow is user-confirmed. Finish
+remaining device edge-case checks and remote CI, and address any measured
+issues. The next AI-facing slice is **Pre-upload Cleanup v1**: screenshot,
+selfie, and blur detection on a participant's own selected photos before
+upload, presented as suggestions the participant confirms — not automatic
+removal. See [ADR 007](docs/adr/007-cleanup-first-ai-direction.md) for why
+this replaced event-relevance AI as the next target.

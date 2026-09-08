@@ -10,6 +10,9 @@ export function normalizeMetadata(values?: Record<string, unknown>): PhotoMetada
     longitude: number(values?.longitude, -180, 180),
     width: number(values?.ExifImageWidth, 1, 100000),
     height: number(values?.ExifImageHeight, 1, 100000),
+    // Proxy for "came from a camera, not a screenshot": true only if exifr
+    // found at least one of the picked EXIF fields at all.
+    has_camera_exif: values !== undefined && Object.values(values).some((v) => v !== undefined),
   };
 }
 

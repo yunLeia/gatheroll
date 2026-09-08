@@ -1,4 +1,21 @@
-# Current Gatheroll relevance model — 2026-09-07
+# Gatheroll relevance model — 2026-09-07 (superseded 2026-09-08)
+
+## Superseded — 2026-09-08
+
+**Event relevance is no longer an AI target for V1.** [ADR 007](../adr/007-cleanup-first-ai-direction.md)
+decided to trust the participant's bulk selection as the relevance signal
+directly, rather than building visual/context AI to re-derive it. The
+"Future hypothesis" section below (visual embeddings → similarity →
+relevance recommendation) was partially implemented as an experiment on the
+unmerged `relevance-embeddings` branch before this correction — see
+[docs/learning/006-vision-ai-direction-pivot.md](../learning/006-vision-ai-direction-pivot.md)
+for why. Everything below is preserved as the **2026-09-07 product-model
+snapshot**, not current direction. The host-boundary correction it documents
+(participants' selection over exact host time windows) remains current; only
+the "visual/contextual relevance is the future AI hypothesis" framing is
+superseded.
+
+# Gatheroll relevance model — 2026-09-07 (historical)
 
 Gatheroll does not require hosts to define precise event boundaries. Participants
 already perform the first broad selection from their own camera rolls. Event relevance
