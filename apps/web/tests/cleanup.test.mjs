@@ -168,6 +168,48 @@ test("compareSelfieBaselines reports both techniques over the same labeled rows"
   assert.equal(report.siglip_zero_shot.tn, 1);
 });
 
+const {
+  cleanupSuggestions,
+  CLEANUP_CONFIG,
+} = require("../.eval-build/features/cleanup/suggestions.js");
+
+test("cleanupSuggestions flags photos with a blur_score below the configured threshold", () => {
+  const config = { version: "v", blur_threshold: 100 };
+  const r = cleanupSuggestions(
+    [
+      { client_id: "a", blur_score: 50, content_hash: null },
+      { client_id: "b", blur_score: 150, content_hash: null },
+    ],
+    config,
+  );
+  assert.deepEqual([...r.blurryIds], ["a"]);
+});
+test("cleanupSuggestions never flags a null blur_score (not yet computed, never fabricated)", () => {
+  const r = cleanupSuggestions(
+    [{ client_id: "a", blur_score: null, content_hash: null }],
+    { version: "v", blur_threshold: 100 },
+  );
+  assert.equal(r.blurryIds.size, 0);
+});
+test("cleanupSuggestions groups exact-duplicate content hashes, ignores null hashes and singletons", () => {
+  const r = cleanupSuggestions(
+    [
+      { client_id: "a", blur_score: null, content_hash: "h1" },
+      { client_id: "b", blur_score: null, content_hash: "h1" },
+      { client_id: "c", blur_score: null, content_hash: null },
+      { client_id: "d", blur_score: null, content_hash: "h2" },
+    ],
+    { version: "v", blur_threshold: 100 },
+  );
+  assert.deepEqual(r.duplicateGroups, [["a", "b"]]);
+});
+test("cleanupSuggestions defaults to CLEANUP_CONFIG when no config is passed", () => {
+  const r = cleanupSuggestions([
+    { client_id: "a", blur_score: CLEANUP_CONFIG.blur_threshold - 1, content_hash: null },
+  ]);
+  assert.equal(r.blurryIds.has("a"), true);
+});
+
 const { groupExactDuplicates } = require("../.eval-build/features/cleanup/duplicates.js");
 
 test("groupExactDuplicates groups items sharing a hash and omits singletons", () => {

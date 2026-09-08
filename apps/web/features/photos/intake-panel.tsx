@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
 import { Button } from "@/components/ui/button";
 import { api, type Participant, type ParticipantPreferences } from "@/lib/api";
+import { cleanupSuggestions } from "../cleanup/suggestions";
 import { photoApi } from "./api";
 import { DiagnosticPanel } from "./diagnostic-panel";
 import { recordDiagnostic, tracePhotoStep } from "./diagnostics";
@@ -337,6 +338,27 @@ export function IntakePanel({
   const uploaded = jobs.filter((job) => job.state === "uploaded").length;
   const failed = jobs.filter((job) => job.state === "failed").length;
   const selected = jobs.length - uploaded;
+  // Suggest-only, pre-upload: computed from data preparePhoto() already
+  // produced. Never auto-removes anything -- flags a tile, the participant
+  // decides (docs/adr/007-cleanup-first-ai-direction.md).
+  const suggestions = useMemo(
+    () =>
+      cleanupSuggestions(
+        jobs.filter((job) => job.state !== "uploaded").map((job) => job.input),
+      ),
+    [jobs],
+  );
+  const duplicateGroupOf = useMemo(() => {
+    const map = new Map<string, { size: number }>();
+    suggestions.duplicateGroups.forEach((group) =>
+      group.forEach((clientId) => map.set(clientId, { size: group.length })),
+    );
+    return map;
+  }, [suggestions]);
+  const suggestedCount = new Set([
+    ...suggestions.blurryIds,
+    ...duplicateGroupOf.keys(),
+  ]).size;
   return (
     <div className="mt-6 min-w-0 space-y-6">
       <p className="text-sm text-muted-foreground">
@@ -394,43 +416,62 @@ export function IntakePanel({
               : `${jobs.length} ${jobs.length === 1 ? "photo" : "photos"} selected`}
             {failed > 0 ? ` · ${failed} failed` : ""}
           </p>
+          {suggestedCount > 0 && (
+            <p className="text-xs text-caution">
+              {suggestedCount} {suggestedCount === 1 ? "photo" : "photos"} flagged
+              below for review — nothing is removed automatically.
+            </p>
+          )}
           <div className="grid grid-cols-3 gap-2">
-            {jobs.map((job) => (
-              <div
-                key={job.input.client_id}
-                className="min-w-0 overflow-hidden rounded-md border border-border"
-              >
-                <Preview url={job.preview} name={job.input.original_filename} />
-                <p
-                  className="truncate px-2 pt-1 text-xs"
-                  title={job.input.original_filename}
+            {jobs.map((job) => {
+              const isBlurry = suggestions.blurryIds.has(job.input.client_id);
+              const duplicateGroup = duplicateGroupOf.get(job.input.client_id);
+              return (
+                <div
+                  key={job.input.client_id}
+                  className="min-w-0 overflow-hidden rounded-md border border-border"
                 >
-                  {job.input.original_filename}
-                </p>
-                <p className="px-2 py-1 text-xs">
-                  {job.state === "uploaded" ? "Stored privately" : job.state}
-                </p>
-                {job.error && (
-                  <p className="px-2 text-xs text-negative">{job.error}</p>
-                )}
-                {job.state !== "uploaded" && (
-                  <button
-                    type="button"
-                    disabled={busy}
-                    className="min-h-11 w-full text-xs underline disabled:opacity-50"
-                    aria-label={`Remove ${job.input.original_filename}`}
-                    onClick={() => {
-                      release(job);
-                      replaceJobs(
-                        jobsRef.current.filter((item) => item !== job),
-                      );
-                    }}
+                  <Preview url={job.preview} name={job.input.original_filename} />
+                  <p
+                    className="truncate px-2 pt-1 text-xs"
+                    title={job.input.original_filename}
                   >
-                    Remove
-                  </button>
-                )}
-              </div>
-            ))}
+                    {job.input.original_filename}
+                  </p>
+                  <p className="px-2 py-1 text-xs">
+                    {job.state === "uploaded" ? "Stored privately" : job.state}
+                  </p>
+                  {job.state !== "uploaded" && (isBlurry || duplicateGroup) && (
+                    <p className="px-2 pb-1 text-xs text-caution">
+                      {isBlurry && duplicateGroup
+                        ? `Possibly blurry · matches ${duplicateGroup.size - 1} other selected photo${duplicateGroup.size - 1 === 1 ? "" : "s"}`
+                        : isBlurry
+                          ? "Possibly blurry"
+                          : `Possible duplicate · matches ${duplicateGroup!.size - 1} other selected photo${duplicateGroup!.size - 1 === 1 ? "" : "s"}`}
+                    </p>
+                  )}
+                  {job.error && (
+                    <p className="px-2 text-xs text-negative">{job.error}</p>
+                  )}
+                  {job.state !== "uploaded" && (
+                    <button
+                      type="button"
+                      disabled={busy}
+                      className="min-h-11 w-full text-xs underline disabled:opacity-50"
+                      aria-label={`Remove ${job.input.original_filename}`}
+                      onClick={() => {
+                        release(job);
+                        replaceJobs(
+                          jobsRef.current.filter((item) => item !== job),
+                        );
+                      }}
+                    >
+                      Remove
+                    </button>
+                  )}
+                </div>
+              );
+            })}
           </div>
           {selected > 0 && !preferencesConfirmed && (
             <PreferencesPanel
