@@ -6,6 +6,7 @@ const { computeBlurScore, possiblyBlurry } = require("../.eval-build/features/cl
 const { validateCleanupDataset } = require("../.eval-build/evaluation/cleanup-dataset.js");
 const { binaryMetrics, binaryErrorKind, binaryErrorsMarkdown } = require("../.eval-build/evaluation/cleanup-reporting.js");
 const { isLikelyScreenshot } = require("../.eval-build/features/cleanup/screenshot.js");
+const { hybridScreenshotDecision } = require("../.eval-build/features/cleanup/screenshot-hybrid.js");
 
 function solid(width, height, value) {
   const data = new Uint8ClampedArray(width * height * 4).fill(value);
@@ -138,6 +139,26 @@ test("require_missing_camera_exif, when true, also requires absent camera EXIF",
     isLikelyScreenshot({ content_type: "image/png", width: 1170, height: 2532, has_camera_exif: false }, strict),
     true,
   );
+});
+
+test("hybridScreenshotDecision: agreement is confident, disagreement stays uncertain", () => {
+  const png = { content_type: "image/png", has_camera_exif: false };
+  const heic = { content_type: "image/heic", has_camera_exif: true };
+  // Both signals agree -> confident either direction.
+  assert.equal(hybridScreenshotDecision("screenshot", png).decision, "screenshot");
+  assert.equal(hybridScreenshotDecision("camera_photo", heic).decision, "camera_photo");
+  // Visual says screenshot but format contradicts (the exact real-data
+  // failure mode: SigLIP2's 4 false positives on the real 49-photo set were
+  // all HEIC camera photos it misread as screenshots) -> stays reviewable,
+  // never silently trusts the visual signal alone.
+  assert.equal(hybridScreenshotDecision("screenshot", heic).decision, "uncertain");
+  // Visual says camera photo but format suggests screenshot -> also uncertain.
+  assert.equal(hybridScreenshotDecision("camera_photo", png).decision, "uncertain");
+});
+test("hybridScreenshotDecision records which signals contributed, for explainability", () => {
+  const result = hybridScreenshotDecision("screenshot", { content_type: "image/png", has_camera_exif: false });
+  assert.ok(result.evidence.some((line) => line.includes("visual classifier: screenshot")));
+  assert.ok(result.evidence.some((line) => line.includes("image/png")));
 });
 
 const { faceHeuristicDecision, compareSelfieBaselines } = require("../.eval-build/evaluation/cleanup-selfie-compare.js");

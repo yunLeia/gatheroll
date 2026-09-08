@@ -92,6 +92,30 @@ Updated: 2026-09-08
   any automatic filtering. ADR 006 and Korean learning note 005 added.
 
 ## Verified
+- **Cleanup v2 classifiers evaluated (2026-09-08, report 008, proposal
+  `docs/product/cleanup-v2-classifiers-proposal.md`) — evaluation only, no
+  production code changed.** Selfie got its first full real-49-photo
+  evaluation (previously only smoke-tested): face-geometry heuristic is
+  systematically blind to 15/49 real photos (no HEIC codec in `cv2`) and
+  recalls only 10% even on the photos it can decode -- not competitive.
+  SigLIP2 zero-shot's original result (0.35 precision, 0.97 FPR) traced to
+  a real methodology bug, not a capability limit: its 3-way prompt set had
+  no "none of these" option, so every screenshot and blurry photo in the
+  set got forced into "selfie." Fixed the prompt set (added
+  `screenshot`/`other_no_selfie` categories) and re-ran: 0 errors on all 49
+  photos (small-n caveat noted in the report). Screenshot got a new
+  interpretable hybrid (`apps/web/features/cleanup/screenshot-hybrid.ts`,
+  written and unit-tested, **not wired into any live path**): visual
+  (SigLIP2) + metadata (format) agree -> confident; disagree ->
+  "uncertain," never a silent guess. On the real set this correctly demoted
+  SigLIP2-alone's 4 false positives to "uncertain" instead of a wrong
+  answer (24 TP / 0 FP / 0 FN / 21 TN / 4 uncertain). Blur and exact-
+  duplicate deliberately untouched. SigLIP2 inference measured at ~200ms/
+  image warm (CPU) with a ~5s one-time model-load cost and a 1.4GB
+  checkpoint -- ruled out browser-side inference, and ruled out needing
+  Redis/a queue/a vector DB for a server-side `BackgroundTasks`-based
+  approach at this traffic scale. Proposal awaits approval before any
+  `apps/api` wiring.
 - **Real-device upload bug found and fixed (2026-09-08):** a phone test
   (5 photos selected) failed with "Could not authorize upload"; API logs
   showed `POST /photos/uploads` returning **422**, not a storage/connection
@@ -343,6 +367,17 @@ Updated: 2026-09-08
   photos) remains explicitly out of scope, unchanged.
 
 ## Next step
+**Awaiting approval: cleanup v2 classifiers proposal**
+(`docs/product/cleanup-v2-classifiers-proposal.md`, report 008, 2026-09-08)
+— selfie and screenshot are now real-evaluated (see Verified above) with a
+concrete, measured production architecture proposed (server-side
+`BackgroundTasks`, no new infra), but nothing is wired in yet per explicit
+direction to wait for approval first. Also explicitly deferred by the same
+direction: the participant-facing "review these suggestions, confirm
+what's shared" UI (the `uploaded privately != shared` boundary doesn't
+exist in the schema yet) and the requested bulk-download feature, both
+UX/UI decisions to be made in a separate pass.
+
 **Host photo gallery v1 proposed** (`docs/product/host-photo-gallery-v1-proposal.md`,
 2026-09-08): the original brief ranks "working shared album without AI"
 above relevance AI (already deferred by ADR 005/007), and it's the largest

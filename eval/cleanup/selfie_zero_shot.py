@@ -13,12 +13,21 @@ from pathlib import Path
 
 DEFAULT_MODEL = "google/siglip2-base-patch16-224"
 
-# Prompt wording matters for zero-shot quality; these three are deliberately
+# Prompt wording matters for zero-shot quality; these are deliberately
 # mutually exclusive framings of "who is this photo of, from whose camera."
+# v2 (2026-09-08): the original 3-way set had no "none of these" option, so
+# every screenshot and blurry camera photo in the real 49-photo set was
+# forced into one of the 3 person-photo labels -- it landed on "selfie" in
+# 31/31 of those cases, which is what actually produced the earlier 96.9%
+# false-positive rate, not a genuine selfie-vs-portrait confusion. Added
+# screenshot and other_no_selfie as real competing categories so the model
+# isn't forced to choose among only positive-class prompts.
 PROMPTS = {
     "selfie": "a selfie photograph taken by the person who appears in it, arm's length or mirror",
     "portrait_by_other": "a portrait photograph of one person, taken by someone else holding the camera",
     "group_photo": "a group photo of multiple people posing together",
+    "screenshot": "a screenshot of a mobile app or phone screen, not a camera photo",
+    "other_no_selfie": "a photograph of scenery, objects, food, or a blurry/out-of-focus camera shot with no clear posed subject",
 }
 
 

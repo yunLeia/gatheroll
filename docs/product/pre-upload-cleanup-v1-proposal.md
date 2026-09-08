@@ -1,5 +1,15 @@
 # Pre-upload Cleanup v1 — technical proposal (not yet implemented)
 
+> **Update, 2026-09-08 (same day):** v1 shipped (blur, screenshot metadata
+> heuristic, exact duplicate, selfie offline comparison) — see
+> `docs/STATUS.md`. Screenshot and selfie's *production* direction has
+> since moved on: see
+> [cleanup-v2-classifiers-proposal.md](cleanup-v2-classifiers-proposal.md)
+> and [report 008](../reports/008-cleanup-v2-classifiers-evaluation.md) for
+> the real selfie evaluation (never completed here) and the screenshot
+> hybrid design. This document's blur/duplicate sections and its
+> cross-cutting design principles still stand.
+
 2026-09-08. Proposal only, per [ADR 007](../adr/007-cleanup-first-ai-direction.md).
 No code written against this yet — pending approval. Three sub-problems, each
 gets its own simplest-fit technique; nothing here forces one model onto all
