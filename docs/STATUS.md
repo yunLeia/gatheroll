@@ -15,6 +15,24 @@ Updated: 2026-09-08
   what's reusable (the embedding generator/caching pattern) versus relevance-
   specific (the scoring baselines, the belongs/does_not_belong labeling scheme).
   See also [learning note 006](learning/006-vision-ai-direction-pivot.md).
+- **Pre-upload Cleanup v1** (report 006, eval guide 003, learning note 007):
+  four deterministic-where-possible signals, each the simplest suitable
+  technique for its own problem, not one model forced onto all four. Blur
+  (Laplacian variance, no model) and screenshot (format/dimension/EXIF
+  heuristic, no model) compute in the browser during `preparePhoto()` and
+  expose `blur_score`/`is_likely_screenshot` on `PhotoJob` — data only, no
+  review/exclude UI yet. Exact-duplicate detection (SHA-256 content hash,
+  `apps/web/features/cleanup/duplicates.ts`) is deterministic with no
+  accuracy question at all; near-duplicate (pHash/embedding) stays
+  explicitly deferred. Selfie detection stays **offline-only**: two
+  pretrained baselines (OpenCV Haar Cascade face geometry vs. SigLIP2
+  zero-shot, `eval/cleanup/`) are compared, not shipped — browser-vs-backend
+  and any production threshold remain open, evidence-gated decisions.
+  Offline evaluation reuses a new minimal per-photo `CleanupExample` schema
+  (`apps/web/evaluation/cleanup-dataset.ts`) and `npm run eval:cleanup`
+  (`--detector blur|screenshot|selfie|duplicates`) — deliberately not the
+  event-relevance harness's shapes (ADR 007: single-photo properties, not
+  cross-photo comparisons).
 - Product correction (ADR 005): participant selection is the first relevance filter;
   exact host boundaries are not membership criteria. Time/GPS are weak context only.
 - Create/API/header: name, optional event_date/location, join policy. Retired starts_at/
@@ -74,6 +92,20 @@ Updated: 2026-09-08
   any automatic filtering. ADR 006 and Korean learning note 005 added.
 
 ## Verified
+- Pre-upload Cleanup v1: web lint/typecheck/build clean after each of the 4
+  detector slices; **50/50 tests passing** (18 new in `cleanup.test.mjs`).
+  Smoke evidence only, not accuracy metrics (full detail in report 006):
+  blur correctly separated a synthetic solid-color image (score 0) from
+  synthetic random noise (score 51,226.99); screenshot heuristic correctly
+  classified a synthetic iPhone-resolution PNG vs. a synthetic camera-
+  resolution JPEG; the selfie face-heuristic found 10 low-confidence false
+  detections (largest 0.12% of frame) on one real photo and could not
+  decode a real HEIC file at all (OpenCV limitation), while SigLIP2
+  zero-shot correctly predicted "selfie" on the same JPEG; exact-duplicate
+  detection correctly grouped a real photo with a byte-identical copy and
+  found **zero duplicate groups across the real local 169-photo set**
+  (a real measurement, not a smoke test — duplicate detection has no
+  accuracy question to smoke-test in the first place).
 - Current correction: web lint/typecheck/**32 tests**/production build and backend
   Ruff/mypy/**61 PostgreSQL tests** passed. Local dev/test Alembic check: no drift.
 - Migration 0004 applied locally: all pre-existing values of **10 events, 6 participants,
@@ -189,14 +221,21 @@ Updated: 2026-09-08
 - Docker is still unavailable locally. Python dependencies remain version ranges.
 
 ## Next step
-**Pre-upload Cleanup v1** (ADR 007): screenshot detection, selfie detection, and
-blur/low-quality detection on a participant's own selected photos, before upload.
-AI suggests, the participant confirms include/exclude — never automatic removal.
-Technical plan (technique choice, browser-vs-backend, whether SigLIP2 is actually
-useful per sub-problem, evaluation approach, false-positive risk) proposed for
-approval before implementation; event relevance, clustering, shared-album
-classification, pHash/near-duplicate detection, external vision APIs, and
-download ZIP infrastructure remain explicitly out of scope until their own slice.
+**Pre-upload Cleanup v1 code is implemented** (blur, screenshot, selfie
+comparison, exact duplicates — see report 006); **real measurement is not.**
+Collect the labeled fixtures in
+[eval guide 003](eval/003-cleanup-v1-experiments.md) (blur/screenshot/selfie
+each need real labeled photos; duplicates already has a real measurement,
+zero groups in the local set) and run each `npm run eval:cleanup` mode
+against them. Only after that: pick a real `blur_threshold`, decide whether
+the screenshot heuristic alone is sufficient or needs the deferred zero-shot
+comparison, and decide (evidence-gated) whether selfie detection is worth
+shipping at all and in which runtime. No review/exclude UI exists yet for
+any of the four signals — that's the deliberate next slice after real
+numbers exist, not before. Explicitly still out of scope: event relevance,
+clustering, shared-album classification, near-duplicate (pHash/embedding)
+detection, storing the content hash server-side for the future download-
+exclude promise, external vision APIs, and download ZIP infrastructure.
 
 Align development LAN URLs/origins with the current IP before phone recheck
 (currently 172.16.29.99; do not assume it stays fixed) — unrelated infrastructure
