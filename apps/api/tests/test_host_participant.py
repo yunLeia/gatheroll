@@ -1,9 +1,11 @@
+from unittest.mock import Mock
 from uuid import uuid4
 
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 from test_access import auth, create, join
+from test_photos import storage  # noqa: F401
 
 from gatheroll_api.models import Participant
 
@@ -30,7 +32,9 @@ def test_host_can_claim_a_participant_identity(
     assert result["status"] == "approved" and result["approved_at"] is not None
 
 
-def test_host_participant_can_use_photo_endpoints(client: TestClient) -> None:
+def test_host_participant_can_use_photo_endpoints(
+    client: TestClient, storage: Mock  # noqa: F811
+) -> None:
     share, host = create(client)
     _, token = claim_host(client, share, host)
     response = client.get(f"/events/{share}/photos/limits", headers=auth(token))
