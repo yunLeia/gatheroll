@@ -1,6 +1,8 @@
 // Deliberately isolated: replace with HttpOnly sessions when the architecture needs them.
 // localStorage credentials are accessible to same-origin JS; XSS can steal them.
-type Role = "host" | "participant";
+// "host-participant" is kept distinct from "participant" so opening the guest
+// invite link in the host's own browser never mixes the two sessions.
+type Role = "host" | "participant" | "host-participant";
 const memory = new Map<string, string>();
 const key = (role: Role, share: string) => `gatheroll:v1:${role}:${share}`;
 const valid = (token: string | null): token is string =>

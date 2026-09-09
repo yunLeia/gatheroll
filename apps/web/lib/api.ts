@@ -121,4 +121,9 @@ export const api = {
       `${eventPath(share)}/participants/me/preferences`,
       { method: "PATCH", token, body: prefs },
     ),
+  hostParticipant: (share: string, token: string) =>
+    request<{ participant: Participant; participant_token: string }>(
+      `${eventPath(share)}/participants/host`,
+      { method: "POST", token },
+    ),
 };

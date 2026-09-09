@@ -17,6 +17,7 @@ async function module(name) {
 }
 const { uploadBatch, UPLOAD_CONCURRENCY, putObject } = await module("upload");
 const { selectionError, contentType, capturedAt } = await module("selection");
+const { toUploadPhoto } = await module("wire");
 const limits = { max_bytes: 100, accepted_types: ["image/jpeg", "image/heic"] };
 
 function jobs(count) {
@@ -53,6 +54,42 @@ test("blank HEIC MIME fallback, authoritative supplied type, and size checks", (
   assert.ok(
     selectionError({ type: "image/jpeg", name: "a.jpg", size: 0 }, limits),
   );
+});
+
+test("wire payload strips client-only suggestion fields the API's extra=forbid schema rejects", () => {
+  const input = {
+    client_id: "c1",
+    original_filename: "IMG_0001.HEIC",
+    content_type: "image/heic",
+    file_size_bytes: 1234,
+    thumbnail_size_bytes: 99,
+    captured_at: "2026-09-08T10:00:00Z",
+    latitude: 1,
+    longitude: 2,
+    width: 100,
+    height: 200,
+    has_camera_exif: true,
+    blur_score: 143.4,
+    is_likely_screenshot: false,
+    content_hash: "deadbeef",
+  };
+  const wire = toUploadPhoto(input);
+  assert.deepEqual(wire, {
+    client_id: "c1",
+    original_filename: "IMG_0001.HEIC",
+    content_type: "image/heic",
+    file_size_bytes: 1234,
+    thumbnail_size_bytes: 99,
+    captured_at: "2026-09-08T10:00:00Z",
+    latitude: 1,
+    longitude: 2,
+    width: 100,
+    height: 200,
+  });
+  assert.ok(!("has_camera_exif" in wire));
+  assert.ok(!("blur_score" in wire));
+  assert.ok(!("is_likely_screenshot" in wire));
+  assert.ok(!("content_hash" in wire));
 });
 
 test("EXIF wall time without offset is not invented UTC", () => {
@@ -177,6 +214,33 @@ test("lost initialization response preserves retry identities", async () => {
     ["0", "1"],
   );
   assert.ok(state.every((j) => j.state === "failed"));
+});
+
+test("initialization failure message distinguishes server rejection from unreachable server", async () => {
+  async function failWith(cause) {
+    let state = jobs(1);
+    await uploadBatch(
+      state,
+      {
+        initialize: async () => {
+          throw cause;
+        },
+        put: async () => assert.fail("no PUT before authorization"),
+        complete: async () => {},
+      },
+      new AbortController().signal,
+      (job) => {
+        state = [job];
+      },
+    );
+    return state[0].error;
+  }
+  // A 4xx/5xx means the server responded and rejected the request itself --
+  // never blame storage/connection for that (this is what a 422 from a bad
+  // client payload used to misreport, see wire.ts).
+  assert.match(await failWith({ status: 422 }), /couldn.t be prepared/i);
+  assert.match(await failWith({ status: 500 }), /try again/i);
+  assert.match(await failWith(new TypeError("Failed to fetch")), /connection/i);
 });
 
 test("thumbnail-only failure retries thumbnail without resending original", async () => {

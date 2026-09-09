@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
 import { Button } from "@/components/ui/button";
 import { api, type Participant, type ParticipantPreferences } from "@/lib/api";
+import { cleanupSuggestions } from "../cleanup/suggestions";
 import { photoApi } from "./api";
 import { DiagnosticPanel } from "./diagnostic-panel";
 import { recordDiagnostic, tracePhotoStep } from "./diagnostics";
@@ -41,11 +42,13 @@ export function IntakePanel({
   token,
   participant,
   onPreferencesUpdated,
+  onUploaded,
 }: {
   share: string;
   token: string;
   participant: Participant;
   onPreferencesUpdated: (participant: Participant) => void;
+  onUploaded: () => void;
 }) {
   const service = useMemo(() => photoApi(share, token), [share, token]);
   const picker = useRef<HTMLInputElement>(null);
@@ -60,6 +63,7 @@ export function IntakePanel({
   const [nextOffset, setNextOffset] = useState<number | null>(null);
   const [busy, setBusy] = useState(false);
   const [listing, setListing] = useState(false);
+  const [listLoaded, setListLoaded] = useState(false);
   const [preparing, setPreparing] = useState("");
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
@@ -86,6 +90,10 @@ export function IntakePanel({
 
   useEffect(() => {
     const controller = new AbortController();
+    // Reload (share/token change, visibility return, manual refresh) should
+    // show the loading state again, not the stale previous list/empty state.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setListLoaded(false);
     service
       .limits(controller.signal)
       .then((result) => {
@@ -98,13 +106,15 @@ export function IntakePanel({
         recordDiagnostic("list_loaded", { count: page.photos.length });
         setNextOffset(page.next_offset);
         setError("");
+        setListLoaded(true);
       })
       .catch(() => {
-        if (!controller.signal.aborted) recordDiagnostic("list_failed");
-        if (!controller.signal.aborted)
-          setError(
-            "Photo storage is unavailable. Check your connection or ask the organizer to configure storage.",
-          );
+        if (controller.signal.aborted) return;
+        recordDiagnostic("list_failed");
+        setError(
+          "Photo storage is unavailable. Check your connection or ask the organizer to configure storage.",
+        );
+        setListLoaded(true);
       });
     // Signed previews expire. Reauthorize on return, without polling in the background.
     const visible = () => {
@@ -266,6 +276,7 @@ export function IntakePanel({
         },
       );
       if (controller.signal.aborted) return;
+      if (jobsRef.current.some((job) => job.state === "uploaded")) onUploaded();
       recordDiagnostic("upload_batch", {
         count: jobsRef.current.length,
         retry_count: retryCount,
@@ -337,12 +348,35 @@ export function IntakePanel({
   const uploaded = jobs.filter((job) => job.state === "uploaded").length;
   const failed = jobs.filter((job) => job.state === "failed").length;
   const selected = jobs.length - uploaded;
+  // Suggest-only, pre-upload: computed from data preparePhoto() already
+  // produced. Never auto-removes anything -- flags a tile, the participant
+  // decides (docs/adr/007-cleanup-first-ai-direction.md).
+  const suggestions = useMemo(
+    () =>
+      cleanupSuggestions(
+        jobs.filter((job) => job.state !== "uploaded").map((job) => job.input),
+        stored,
+      ),
+    [jobs, stored],
+  );
+  const duplicateGroupOf = useMemo(() => {
+    const map = new Map<string, { size: number }>();
+    suggestions.duplicateGroups.forEach((group) =>
+      group.forEach((clientId) => map.set(clientId, { size: group.length })),
+    );
+    return map;
+  }, [suggestions]);
+  const suggestedCount = new Set([
+    ...suggestions.blurryIds,
+    ...duplicateGroupOf.keys(),
+    ...suggestions.alreadyUploadedIds,
+  ]).size;
   return (
     <div className="mt-6 min-w-0 space-y-6">
       <p className="text-sm text-muted-foreground">
-        Select photos from around the event. Originals and available location
-        metadata are uploaded privately. Nothing is shared with your host or
-        other participants.
+        Choose photos to share with this event. Uploading makes them available
+        to the host and all approved participants, including original downloads.
+        Original files may include location metadata.
       </p>
       <input
         ref={picker}
@@ -361,6 +395,11 @@ export function IntakePanel({
       >
         Add photos
       </Button>
+      {!limits && !error && (
+        <p role="status" className="text-xs text-muted-foreground">
+          Loading photo settings…
+        </p>
+      )}
       {limits && (
         <p className="text-xs text-muted-foreground">
           Up to {limits.batch_limit} photos per batch ·{" "}
@@ -390,47 +429,72 @@ export function IntakePanel({
         <section className="space-y-3" aria-label="Selected photos">
           <p role="status">
             {uploaded > 0
-              ? `${uploaded} / ${jobs.length} stored privately`
+              ? `${uploaded} / ${jobs.length} shared with the event`
               : `${jobs.length} ${jobs.length === 1 ? "photo" : "photos"} selected`}
             {failed > 0 ? ` · ${failed} failed` : ""}
           </p>
+          {suggestedCount > 0 && (
+            <p className="text-xs text-caution">
+              {suggestedCount} {suggestedCount === 1 ? "photo" : "photos"} flagged
+              below for review — nothing is removed automatically.
+            </p>
+          )}
           <div className="grid grid-cols-3 gap-2">
-            {jobs.map((job) => (
-              <div
-                key={job.input.client_id}
-                className="min-w-0 overflow-hidden rounded-md border border-border"
-              >
-                <Preview url={job.preview} name={job.input.original_filename} />
-                <p
-                  className="truncate px-2 pt-1 text-xs"
-                  title={job.input.original_filename}
+            {jobs.map((job) => {
+              const isBlurry = suggestions.blurryIds.has(job.input.client_id);
+              const duplicateGroup = duplicateGroupOf.get(job.input.client_id);
+              const isAlreadyUploaded = suggestions.alreadyUploadedIds.has(
+                job.input.client_id,
+              );
+              const flags = [
+                isBlurry && "Possibly blurry",
+                duplicateGroup &&
+                  `Possible duplicate · matches ${duplicateGroup.size - 1} other selected photo${duplicateGroup.size - 1 === 1 ? "" : "s"}`,
+                isAlreadyUploaded &&
+                  "Matches a photo you already uploaded",
+              ].filter(Boolean);
+              return (
+                <div
+                  key={job.input.client_id}
+                  className="min-w-0 overflow-hidden rounded-md border border-border"
                 >
-                  {job.input.original_filename}
-                </p>
-                <p className="px-2 py-1 text-xs">
-                  {job.state === "uploaded" ? "Stored privately" : job.state}
-                </p>
-                {job.error && (
-                  <p className="px-2 text-xs text-negative">{job.error}</p>
-                )}
-                {job.state !== "uploaded" && (
-                  <button
-                    type="button"
-                    disabled={busy}
-                    className="min-h-11 w-full text-xs underline disabled:opacity-50"
-                    aria-label={`Remove ${job.input.original_filename}`}
-                    onClick={() => {
-                      release(job);
-                      replaceJobs(
-                        jobsRef.current.filter((item) => item !== job),
-                      );
-                    }}
+                  <Preview url={job.preview} name={job.input.original_filename} />
+                  <p
+                    className="truncate px-2 pt-1 text-xs"
+                    title={job.input.original_filename}
                   >
-                    Remove
-                  </button>
-                )}
-              </div>
-            ))}
+                    {job.input.original_filename}
+                  </p>
+                  <p className="px-2 py-1 text-xs">
+                    {job.state === "uploaded" ? "Shared" : job.state}
+                  </p>
+                  {job.state !== "uploaded" && flags.length > 0 && (
+                    <p className="px-2 pb-1 text-xs text-caution">
+                      {flags.join(" · ")}
+                    </p>
+                  )}
+                  {job.error && (
+                    <p className="px-2 text-xs text-negative">{job.error}</p>
+                  )}
+                  {job.state !== "uploaded" && (
+                    <button
+                      type="button"
+                      disabled={busy}
+                      className="min-h-11 w-full text-xs underline disabled:opacity-50"
+                      aria-label={`Remove ${job.input.original_filename}`}
+                      onClick={() => {
+                        release(job);
+                        replaceJobs(
+                          jobsRef.current.filter((item) => item !== job),
+                        );
+                      }}
+                    >
+                      Remove
+                    </button>
+                  )}
+                </div>
+              );
+            })}
           </div>
           {selected > 0 && !preferencesConfirmed && (
             <PreferencesPanel
@@ -449,7 +513,7 @@ export function IntakePanel({
                   ? "Working…"
                   : failed === selected
                     ? `Retry ${failed}`
-                    : `Upload ${selected} privately`}
+                    : `Upload and share ${selected}`}
               </Button>
             </div>
           )}
@@ -468,9 +532,14 @@ export function IntakePanel({
           {nextOffset !== null ? "+" : ""}
         </h3>
         <p className="text-sm text-muted-foreground">
-          Stored privately · Unreviewed
+          Shared with the event
         </p>
-        {!stored.length && (
+        {!listLoaded && !error && (
+          <p role="status" className="text-sm text-muted-foreground">
+            Loading your uploads…
+          </p>
+        )}
+        {listLoaded && !stored.length && (
           <p className="text-sm text-muted-foreground">
             Confirmed uploads will appear here.
           </p>

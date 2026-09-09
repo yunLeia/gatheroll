@@ -1,4 +1,11 @@
 > Historical source brief. On 2026-09-07, required host start/end boundaries and primary
+
+> **Product correction (2026-09-08, ADR 008):** uploading selected photos is the
+> sharing action for the event; no separate post-upload sharing confirmation is
+> required. Earlier private-staging/confirmation language below is superseded.
+> The shared album now serves the host and every approved participant (ADR 009).
+> See [ADR 008](../adr/008-upload-is-event-sharing.md).
+
 > time/GPS membership filtering were superseded by [ADR 005](../adr/005-event-boundaries-are-not-membership.md).
 > Use the [current product model](event-relevance.md): participant selection first,
 > visual/contextual relevance hypothesis, weak optional metadata. The original text below

@@ -9,7 +9,10 @@ use docs/STATUS.md to distinguish current behavior from older slice constraints.
 ## Product invariants
 - Gatheroll means gather + camera roll: reduce coordination after group events.
 - Mobile web first, no mandatory signup; broad explicit photo selection later.
-- Privacy: uploaded is not shared. AI recommends; the user confirms sharing.
+- Sharing: selecting photos and completing upload shares them with the event. No separate
+  post-upload sharing confirmation. AI suggests; the user controls what to upload.
+  The host and every approved participant can view and download the event album.
+  Event sharing does not mean public storage or unrestricted access.
 - Precision before recall. Establish golden labels and metadata baselines before embeddings.
 - No automatic camera-roll access, no invented metrics, no LLM for every image.
 - Neutral camera-roll UI; no film aesthetic or social feed.

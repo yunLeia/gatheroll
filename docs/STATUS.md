@@ -1,8 +1,56 @@
 # Gatheroll status
 
-Updated: 2026-09-08
+Updated: 2026-09-09
 
 ## Implemented
+- **Bulk "download all excluding mine" (2026-09-09):** `GET
+  .../album` gained an `exclude_mine` query param, filtered server-side in
+  `list_album` using the identity `require_album_access` already resolves
+  (host or participant) -- the response body still never exposes who
+  uploaded what, matching the album's existing privacy design. Frontend adds
+  a "Download all (excluding mine)" button to the shared album: pages
+  through every excluded-mine photo, fetches each signed original, and
+  prefers the Web Share API (`navigator.share({ files })`, opening the OS
+  share sheet so a phone can "Save Images" straight to Camera Roll/Gallery
+  in one tap) with an automatic client-side zip fallback (`fflate`) when
+  sharing files isn't available. Web Share requires a secure context
+  (HTTPS or `localhost`); it will not work over today's plain-HTTP LAN dev
+  setup, which is exactly when the zip fallback kicks in. Real server-side
+  ZIP streaming was deliberately not built (previously and again deferred
+  as heavier, separate infrastructure); this is a client-only feature aside
+  from the one query param.
+- **Host can upload photos too (2026-09-09):** the host previously had no
+  upload path at all -- only a management token, not a participant record,
+  and every photo endpoint required an approved `Participant`. New
+  `POST /events/{share}/participants/host` (host-token-gated, idempotent)
+  claims or reuses the host's own auto-approved participant identity
+  (`Participant.is_host`, at most one per event via a partial unique index,
+  migration 0007). Token is one-way hashed like `manage_token`, so a repeat
+  claim rotates it rather than re-revealing the original -- safe since only
+  the host's own management token can reach this endpoint. `list_participants`
+  excludes `is_host` rows so the host doesn't see themselves in their own
+  approval queue. No changes to `photos.py`/`album.py`: upload, retry and
+  album listing already worked generically off any approved participant.
+  Frontend reuses the existing `IntakePanel` unchanged on the host page,
+  storing the host's participant token under a distinct `"host-participant"`
+  credential role (separate from guest `"participant"` storage, so opening
+  the guest invite link in the host's own browser never collides). Shared
+  album auto-refreshes after a host upload, same as the participant flow.
+- **Shared event album implemented (2026-09-08, ADR 008/009):** uploading
+  selected photos shares them with the event, with no second confirmation.
+  Host and every approved participant use the same album; pending/rejected
+  participants and other-event credentials are denied. Existing completed uploads
+  are included; unfinished uploads are hidden. `uploaded_private` remains the
+  compatible storage lifecycle value, not an uploader-only access rule.
+  `GET /events/{share}/album` returns 50 thumbnails/page with Load more;
+  `/album/{photo_id}/original?download=false|true` signs inline/attachment original
+  links on demand after authorization. Personal `/photos` list and mutation
+  ownership checks stay intact. R2 remains private; no image-byte proxy.
+  Shared UI includes loading/error/empty states, manual Refresh, original viewer,
+  download, format fallback and automatic album refresh after an upload batch.
+  Upload copy now clearly describes event sharing and original EXIF metadata.
+  Host-only gallery stub replaced; README, product notices and Korean learning
+  note 009 updated. No migration, AI wiring or bulk download in this slice.
 - **AI direction pivot (ADR 007, 2026-09-08):** event relevance is no longer a V1
   AI target. Participant selection is trusted as relevance directly. AI investment
   moves to pre-upload cleanup (screenshot/selfie/blur detection, suggest-only),
@@ -92,6 +140,172 @@ Updated: 2026-09-08
   any automatic filtering. ADR 006 and Korean learning note 005 added.
 
 ## Verified
+- **Real-user zip bug found and fixed (2026-09-09):** on real LAN/phone
+  use with two real photos (~6.9MB total, not the tiny synthetic fixtures
+  used above), the zip download got stuck in Chrome as a permanent
+  "Unconfirmed ####.crdownload" file. `unzip -l` on the stuck file showed
+  the archive itself was fully correct (both real JPEGs present, right
+  sizes) -- not a corrupt zip, a browser download-manager confirmation
+  that never fired. Root cause: `bulkDownload` called
+  `URL.revokeObjectURL()` synchronously right after `link.click()`, racing
+  the browser's async read of the blob for larger files. Fixed by
+  deferring the revoke 30s via `setTimeout`. Re-verified with
+  lint/typecheck/67 Node tests/production build; the real-download repro
+  itself needs a re-check on an actual phone (small synthetic zips in this
+  session's browser-tool testing never hit the race, which is why it
+  shipped un-caught).
+- **Bulk download (2026-09-09):** web lint/typecheck/**67 Node tests** (5 new
+  in `bulk-download.test.mjs`, covering the pure `collectAll` pagination loop
+  and the `uniqueFilename` dedupe helper -- `fflate`'s bare import breaks this
+  project's transpile-on-the-fly Node test harness, so the DOM/fetch/zip glue
+  in `bulk-download.ts` is browser-verified only, not unit-tested)/production
+  build; backend Ruff/mypy/**82 PostgreSQL tests** (2 new: exclude_mine filters
+  only the requester's own photos both ways between two participants and is a
+  no-op by default and for a host with no claimed identity; exclude_mine also
+  correctly excludes the host's own uploads once claimed) all passed. Live
+  browser check (localhost, same LAN-IP sandbox workaround as the host-upload
+  verification): created an event, uploaded one photo as host through the UI
+  and one as a separate approved guest via direct signed-URL API calls,
+  clicked "Download all (excluding mine)" as the host, and confirmed via
+  network logs that `exclude_mine=true` returned only the guest's photo (not
+  the host's own) and that its signed original was fetched, with no console
+  errors and the button returning to its normal state. This sandboxed browser
+  has no OS share-sheet integration (`navigator.share` is `undefined` even on
+  the secure `localhost` context), so this run exercised the zip fallback
+  path specifically -- which is also the path guaranteed to be hit on today's
+  plain-HTTP LAN phone setup. The Web Share path itself (`canShare`/`share`
+  feature-detection, opening the native "Save Images" sheet) is unverified
+  by any automated browser and needs a real HTTPS/phone check.
+- **Host upload (2026-09-09):** web lint/typecheck/**62 Node tests**/production
+  build; backend Ruff/mypy/**80 PostgreSQL tests** (8 new in
+  `test_host_participant.py`: claim, photo-endpoint usage, exclusion from the
+  host's participant list, idempotent claim with token rotation invalidating
+  the prior token, and host-credential-required rejection) all passed.
+  Migration 0007 applied cleanly to both `gatheroll` and `gatheroll_test`.
+  Live browser check (localhost, to route around this session's browser tool
+  not being able to reach the LAN IP): created an event, host claimed a
+  participant identity automatically on page load, selected and uploaded one
+  generated JPEG through the reused `IntakePanel`, upload confirmed ("1/1
+  shared with the event"), and the shared album auto-refreshed to show "1
+  photos loaded" without a manual refresh. No new mobile/physical-device
+  verification. Synthetic development event ("Host Upload Test") and its one
+  original/thumbnail remain in local dev DB/R2 for review.
+- **SigLIP2 status audit (2026-09-08):** recomputed confusion counts from saved
+  local predictions and the 49-photo manifest (no new inference run): selfie v2
+  TP17/FP0/FN0/TN32; screenshot v1 TP24/FP4/FN0/TN21. The manifest has zero
+  examples outside the selfie/screenshot/blurry categories, so ordinary non-selfie
+  portraits and everyday sharp non-selfie photos are an important holdout gap.
+  `cleanup-selfie-compare/results.json` still contains the old 3-prompt run;
+  `selfie-zero-shot-v2.json` is the corrected result. Live API has no model
+  inference; screenshot hybrid is not wired into upload or album paths.
+- **Shared album (2026-09-08):** web lint/typecheck, **62 Node tests**, production
+  Next.js build; backend Ruff/mypy, **75 PostgreSQL tests** passed. Dedicated
+  `gatheroll_test` migrated with Alembic before tests. Two existing upstream
+  TestClient deprecation warnings remain. Test command overrides
+  `GATHEROLL_WEB_ORIGIN=http://localhost:3000`; without this, local LAN `.env`
+  causes two existing CORS tests to fail. Build passed after preserving the
+  generated Turbopack cache that retained a sandbox helper-port error and retrying
+  with local helper-port permission. No remote CI/deployment claim.
+- **Live browser/R2 album check:** created a synthetic open event and participant,
+  uploaded two generated JPEGs; both appeared automatically in participant album
+  and in host album after Refresh. Full original decoded at 1200×900; browser
+  download event received. Escape dismissed viewer; reload restored participant,
+  personal uploads and shared album. Desktop layout inspected without horizontal
+  overflow. Requested 390px viewport override did not take effect (reported
+  1280px), so no new mobile-size or physical-device verification claimed.
+  Synthetic development event and two originals/two thumbnails remain for review.
+- **IP checked at user request:** `ipconfig getifaddr en0` still returned
+  `10.17.77.0`; web API base, API allowed origin, and `allowedDevOrigins` all match.
+  No network settings changed. Browser API/upload/view/download worked at this IP.
+- **Cleanup v2 classifiers evaluated (2026-09-08, report 008, proposal
+  `docs/product/cleanup-v2-classifiers-proposal.md`) — evaluation only, no
+  production code changed.** Selfie got its first full real-49-photo
+  evaluation (previously only smoke-tested): face-geometry heuristic is
+  systematically blind to 15/49 real photos (no HEIC codec in `cv2`) and
+  recalls only 10% even on the photos it can decode -- not competitive.
+  SigLIP2 zero-shot's original result (0.35 precision, 0.97 FPR) traced to
+  a real methodology bug, not a capability limit: its 3-way prompt set had
+  no "none of these" option, so every screenshot and blurry photo in the
+  set got forced into "selfie." Fixed the prompt set (added
+  `screenshot`/`other_no_selfie` categories) and re-ran: 0 errors on all 49
+  photos (small-n caveat noted in the report). Screenshot got a new
+  interpretable hybrid (`apps/web/features/cleanup/screenshot-hybrid.ts`,
+  written and unit-tested, **not wired into any live path**): visual
+  (SigLIP2) + metadata (format) agree -> confident; disagree ->
+  "uncertain," never a silent guess. On the real set this correctly demoted
+  SigLIP2-alone's 4 false positives to "uncertain" instead of a wrong
+  answer (24 TP / 0 FP / 0 FN / 21 TN / 4 uncertain). Blur and exact-
+  duplicate deliberately untouched. SigLIP2 inference measured at ~200ms/
+  image warm (CPU) with a ~5s one-time model-load cost and a 1.4GB
+  checkpoint -- ruled out browser-side inference, and ruled out needing
+  Redis/a queue/a vector DB for a server-side `BackgroundTasks`-based
+  approach at this traffic scale. Proposal awaits approval before any
+  `apps/api` wiring.
+- **Real-device upload bug found and fixed (2026-09-08):** a phone test
+  (5 photos selected) failed with "Could not authorize upload"; API logs
+  showed `POST /photos/uploads` returning **422**, not a storage/connection
+  problem as the generic error text implied. Root cause: `PhotoInput` on the
+  client (`apps/web/features/photos/types.ts`) grew four suggestion-only
+  fields during the cleanup work (`has_camera_exif`, `blur_score`,
+  `is_likely_screenshot`, `content_hash`) that were never meant to leave the
+  browser, but `photos/api.ts`'s `initialize()` sent the full object as-is
+  into a request body the API's `PhotoInput` schema validates with
+  `extra="forbid"` (`apps/api/.../photo_schemas.py`) -- every batch with any
+  photo carrying those fields 422'd, unconditionally, regardless of storage
+  health. Nothing in existing lint/typecheck/56-test/build coverage caught
+  it: TypeScript's structural typing doesn't flag extra properties, and no
+  test exercised the real wire payload (existing tests inject a fake
+  `services.initialize`, bypassing `api.ts` entirely). Fixed by extracting
+  `toUploadPhoto()` (`apps/web/features/photos/wire.ts`) to strip the four
+  client-only fields before the request, with a new test asserting exactly
+  that, plus a test differentiating the old generic error message so a
+  future 4xx/5xx no longer blames storage. Verified two ways: (1) replayed
+  the literal old buggy payload against the live local API -> reproduced the
+  same 422 with `extra_forbidden` on all four fields; replayed the fixed
+  payload -> 200 with valid signed R2 URLs, proving storage/R2 itself was
+  never the problem; (2) full lint/typecheck/58-test/build clean.
+  **Re-verified on an actual phone (2026-09-08): confirmed fixed** --
+  `POST /photos/uploads` now returns 200 for the real device.
+
+  **Second, separate bug found in the same session, also now resolved:**
+  after the 422 fix, real uploads still failed one step later ("Not
+  confirmed. Retry keeps successful upload steps.") -- the direct browser
+  PUT to the signed R2 URL. This reproduced identically in an automated
+  Chrome session (503, 3/3 attempts) and, decisively, on the real phone
+  too, which ruled out the initial "Cloudflare bot-detection targeting the
+  automation session" theory recorded earlier. A direct CORS preflight
+  probe against the signed R2 URL (`curl -X OPTIONS` with
+  `Origin`/`Access-Control-Request-*` headers) returned the real cause:
+  `403 Forbidden -- "CORS not configured for this bucket"`. The
+  `gatheroll-dev` R2 bucket had no CORS policy at all, so every real
+  browser (which requires a CORS preflight for a cross-origin `PUT`) failed
+  before the request even reached the signed-URL logic, while plain `curl`
+  (no browser, no preflight) always succeeded against the identical URL --
+  exactly the discriminator that made this look browser/automation-specific
+  rather than infrastructure. Not fixable from this session: the scoped API
+  key gets `AccessDenied` even reading `GetBucketCors`, let alone writing
+  it. User added a CORS policy via the Cloudflare dashboard (allowing
+  `http://localhost:3000` and the LAN IP, `PUT/GET/HEAD`) and confirmed a
+  real end-to-end phone upload succeeded. **Recurring gotcha, not a
+  one-time fix:** like `NEXT_PUBLIC_API_BASE_URL`/`GATHEROLL_WEB_ORIGIN`/
+  `allowedDevOrigins`, this bucket CORS allowlist needs the new LAN IP
+  added again every time it changes -- see the LAN phone-testing memory.
+
+  **Third finding, same session, product/UX not code:** a participant
+  reported deselecting "Selfies" in upload preferences but the photo
+  uploaded anyway. Confirmed as intentional-but-misleadingly-worded, not a
+  bug: `include_selfies`/`include_screenshots` are saved
+  (`participants/me/preferences`) but never consulted anywhere to filter
+  selection or upload (deliberate per ADR 006 -- no selfie-detection
+  signal exists client-side to filter by, and no browser-vs-backend/
+  threshold decision has been made per ADR 007). The toggle's old copy
+  ("Include selfies from this event") read as an immediate action, not a
+  stored-for-later preference. Reworded to "Saved for later -- everything
+  you pick still uploads today" (`preferences-panel.tsx`) so the UI stops
+  promising filtering the app doesn't do yet. Actual enforcement remains
+  future work and the natural first candidate is the host gallery view
+  (`docs/product/host-photo-gallery-v1-proposal.md` already flags this
+  exact open question).
 - Pre-upload Cleanup v1: web lint/typecheck/build clean after each of the 4
   detector slices; **50/50 tests passing** (18 new in `cleanup.test.mjs`).
   Smoke evidence only, not accuracy metrics (full detail in report 006):
@@ -227,30 +441,97 @@ Updated: 2026-09-08
 - Intermittent browser network TypeErrors occurred during development; API health/event
   requests returned 200 and retry recovered. Underlying cause not established.
 - Clipboard button success shown, but tool clipboard readback was unavailable.
-- No AI/shared album, accounts, host editing, token rotation/recovery, participant
-  pagination, global abuse/rate limits, expiry enforcement or deployment added.
+- No production selfie/screenshot inference, accounts, host editing, token
+  rotation/recovery, participant pagination, global abuse/rate limits, expiry
+  enforcement or deployment added. Shared album is implemented above.
 - Lost localStorage loses identity; XSS can steal tokens. Event create/join still have
   no POST idempotency keys; photo initialization has scoped client UUID idempotency.
 - Legacy events with NULL manage_token_hash remain readable but unmanageable.
 - Docker is still unavailable locally. Python dependencies remain version ranges.
 
-## Next step
-**Pre-upload Cleanup v1 code is implemented** (blur, screenshot × 2
-baselines, selfie comparison, exact duplicates); **real measurement now
-exists for blur and screenshot** (report 007, real 49-photo set) — selfie
-still only has the report 006 plumbing check, not a real-set precision/
-recall run. n=49 is a real measurement, not synthetic, but still small
-relative to the 100–250 reference scale the earlier relevance-labeling
-guide used — treat current numbers as a start, not a final answer, and
-grow the labeled set before making any production call. No production/
-browser-vs-backend decision exists yet for any of the four signals, and no
-review/exclude UI exists yet either — that's the deliberate next slice
-after real numbers exist, not before. Explicitly still out of scope: event
-relevance, clustering, shared-album classification, near-duplicate
-(pHash/embedding) detection, storing the content hash server-side for the
-future download-exclude promise, external vision APIs, and download ZIP
-infrastructure.
+- Suggest-only blur/duplicate review badges (commit 575f302): exact-duplicate
+  suggestion browser-verified end-to-end (two byte-identical JPEGs uploaded
+  under different filenames in a live Chrome session both correctly showed
+  "Possible duplicate," nothing auto-removed). Blur suggestion badge remains
+  unit-tested/evaluated only (report 007's 49-photo set) — the real-HEIC
+  browser path is still unverified; browser automation could not push actual
+  `.heic` files through the picker in that session (files were silently
+  skipped), and a JPEG proxy of a labeled-blurry photo scored above the
+  provisional `blur_threshold=100` and correctly went unflagged given that
+  threshold — not evidence of a bug, just an unverified path. A real iPhone/
+  Safari check with a genuinely blurry HEIC is planned separately.
 
-Align development LAN URLs/origins with the current IP before phone recheck
-(currently 172.16.29.99; do not assume it stays fixed) — unrelated infrastructure
-follow-up, independent of the AI direction above.
+## Local dev troubleshooting notes
+- **Alembic drift → 503 on every participant join.** If `POST /events/{token}/participants`
+  returns `{"code":"service_unavailable"}` with no other detail, check `alembic current`
+  vs. `alembic heads` in `apps/api` before suspecting app logic — a local dev DB sitting
+  behind head (missing e.g. the 0005 `include_selfies`/`include_screenshots` columns) makes
+  every insert raise `SQLAlchemyError`, which `main.py`'s handler intentionally flattens to a
+  generic 503 (no column/table detail leaked to the client). Fix: `alembic upgrade head`
+  against the local DB; not a code bug. Hit and resolved this way during suggest-only
+  blur/duplicate badge browser verification (2026-09-08).
+
+- **Cross-batch "already uploaded" duplicate detection added (2026-09-08):**
+  a real phone report ("selected the same photo twice, no duplicate flag")
+  traced to a real gap, not a broken model: `groupExactDuplicates`
+  (`content_hash`, exact SHA-256) only ever compared photos *within the
+  current not-yet-uploaded selection* -- it never checked a new selection
+  against photos already confirmed-uploaded in an earlier batch, since the
+  comparison set was `jobs.filter(state !== "uploaded")`. Can't reuse
+  content-hash matching for that path (the server deliberately never
+  stores `content_hash`, per ADR 007's scope notes), so added a second,
+  weaker-but-deterministic proxy: `alreadyUploadedIds()`
+  (`apps/web/features/cleanup/duplicates.ts`) matches a new selection
+  against `stored` by `(original_filename, file_size_bytes)`, both of
+  which the server already returns from `GET /photos` and just weren't
+  surfaced in the frontend's `StoredPhoto` type. New badge, distinct from
+  "Possible duplicate": "Matches a photo you already uploaded". Verified
+  end-to-end in a live browser: uploaded a photo, re-added the identical
+  file in a separate "Add photos" action, badge appeared correctly.
+  Regression tests added at both the `alreadyUploadedIds` and
+  `cleanupSuggestions` level. Near-duplicate (different-but-similar
+  photos) remains explicitly out of scope, unchanged.
+
+## Next step
+The shared event album slice is complete. Next acceptance check: a physical phone
+opens the same event as a second approved participant, views another person's
+upload and downloads an original (including a real HEIC). Browser verification
+above covers host and uploader; PostgreSQL tests cover a different participant.
+
+Do not start another slice until requested. Options discussed with the user:
+download convenience (exclude own uploads, then bulk download) and later production
+cleanup classifiers. `cleanup-v2-classifiers-proposal.md` remains a proposal;
+its separate post-upload sharing-confirmation requirement is superseded by ADR 008.
+Selfie prompts are frozen pending unseen holdout evaluation. Real 49-photo results
+are development-set evidence, not a held-out accuracy claim. No model runtime,
+queue, ZIP infrastructure, or automatic filtering has been added.
+
+### Earlier LAN troubleshooting history
+
+LAN URLs/origins realigned to the current IP (2026-09-08): the Mac's address
+changed again (now 10.17.77.0; still do not assume it stays fixed —
+re-check with `ipconfig getifaddr en0` each session). Updated
+`apps/web/.env.local` (`NEXT_PUBLIC_API_BASE_URL`) and `apps/api/.env`
+(`GATHEROLL_WEB_ORIGIN`) to the current IP and restarted both dev servers
+(`next dev` already binds all interfaces by default; `uvicorn` needed an
+explicit `--host 0.0.0.0`, which it was missing). Both confirmed reachable
+over LAN by IP (`/health` 200, web root 200). Not yet re-verified from an
+actual phone this session. Trade-off: `GATHEROLL_WEB_ORIGIN` only allows one
+CORS origin at a time, so laptop browser testing against `localhost:3000`
+will fail CORS while this is pointed at the LAN IP — use the LAN IP on the
+laptop too, or flip `.env` back for localhost-only work.
+
+**Follow-up, same day:** opening `http://10.17.77.0:3000` in an actual
+browser (not `curl`) hung forever on "Checking API…" despite both servers
+being individually reachable. Root cause was neither the servers nor the
+network: `apps/web/next.config.ts` had a stale `allowedDevOrigins:
+["192.168.1.185"]` left over from report 005's earlier LAN mismatch — Next
+dev's cross-origin protection silently blocks dev-resource requests from
+any origin not on that list, and a stale Turbopack-cached chunk (`.next/`)
+was also still serving the old `localhost:8000` API base URL. Fixed by
+updating `allowedDevOrigins` to the current IP, clearing `.next`, and
+restarting; browser-confirmed "API connected" afterward via a live Chrome
+session. Lesson for the next IP change: `allowedDevOrigins` in
+`next.config.ts` needs updating too, not just the two `.env` files, and a
+stale Turbopack cache is a real failure mode after an env change — `rm -rf
+.next` before assuming the app itself is broken.

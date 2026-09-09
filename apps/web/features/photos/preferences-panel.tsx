@@ -74,13 +74,13 @@ export function PreferencesPanel({
       </div>
       <PreferenceRow
         title="Selfies"
-        description="Include selfies from this event"
+        description="Saved for later — everything you pick still uploads today"
         checked={includeSelfies}
         onToggle={() => setIncludeSelfies((v) => !v)}
       />
       <PreferenceRow
         title="Screenshots"
-        description="Include screenshots"
+        description="Saved for later — everything you pick still uploads today"
         checked={includeScreenshots}
         onToggle={() => setIncludeScreenshots((v) => !v)}
       />

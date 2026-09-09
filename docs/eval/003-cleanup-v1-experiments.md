@@ -7,7 +7,14 @@ and [ADR 007](../adr/007-cleanup-first-ai-direction.md). Read those first for
 each one needs*. [Report 006](../reports/006-cleanup-v1-smoke-evidence.md)
 has the initial plumbing/smoke evidence; [report 007](../reports/007-cleanup-v1-real-evaluation.md)
 has the first real precision/recall numbers, from a real 49-photo labeled
-set, for blur and both screenshot baselines.
+set, for blur and both screenshot baselines. [Report 008](../reports/008-cleanup-v2-classifiers-evaluation.md)
+completes selfie's real-set evaluation (previously smoke-tested only,
+report 006) and adds the screenshot hybrid's evaluation, with the
+production-architecture proposal in
+[cleanup-v2-classifiers-proposal.md](../product/cleanup-v2-classifiers-proposal.md).
+`selfie_zero_shot.py`'s prompt set changed as part of that (v2: 5-way,
+fixed a real "no none-of-these option" bug in the original 3-way set) —
+re-running `--detector selfie` now uses the corrected prompts.
 
 ## Shared manifest shape
 

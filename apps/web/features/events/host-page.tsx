@@ -3,10 +3,18 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { QRCodeSVG } from "qrcode.react";
-import { api, ApiError, type EventInfo } from "@/lib/api";
-import { inviteLink, managePath, restoreHost } from "@/lib/credentials";
+import { api, ApiError, type EventInfo, type Participant } from "@/lib/api";
+import {
+  inviteLink,
+  managePath,
+  readCredential,
+  restoreHost,
+  saveCredential,
+} from "@/lib/credentials";
 import { EventHeader } from "./event-header";
 import { HostParticipants } from "@/features/participants/host-participants";
+import { IntakePanel } from "@/features/photos/intake-panel";
+import { SharedAlbum } from "@/features/photos/shared-album";
 import { PageHeader } from "@/components/ui/page-header";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -21,6 +29,10 @@ export function HostPage({ share }: { share: string }) {
   const [retry, setRetry] = useState(0);
   const [copied, setCopied] = useState("");
   const [fallbackLink, setFallbackLink] = useState("");
+  const [participantToken, setParticipantToken] = useState<string | null>(null);
+  const [participant, setParticipant] = useState<Participant | null>(null);
+  const [uploadError, setUploadError] = useState("");
+  const [albumRevision, setAlbumRevision] = useState(0);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -58,6 +70,45 @@ export function HostPage({ share }: { share: string }) {
       });
     return () => controller.abort();
   }, [share, retry, router]);
+
+  useEffect(() => {
+    // The host's own upload identity is a participant record; claim or reuse it
+    // once the management token is confirmed valid, so the host can share
+    // photos through the same intake flow guests use.
+    if (!event || !token) return;
+    const controller = new AbortController();
+    async function claim(hostToken: string): Promise<void> {
+      const result = await api.hostParticipant(share, hostToken);
+      if (controller.signal.aborted) return;
+      saveCredential("host-participant", share, result.participant_token);
+      setParticipantToken(result.participant_token);
+      setParticipant(result.participant);
+    }
+    (async () => {
+      try {
+        const cached = readCredential("host-participant", share);
+        if (cached) {
+          const result = await api.me(share, cached, controller.signal);
+          if (controller.signal.aborted) return;
+          setParticipantToken(cached);
+          setParticipant(result);
+          return;
+        }
+        await claim(token);
+      } catch {
+        if (controller.signal.aborted) return;
+        try {
+          await claim(token);
+        } catch {
+          if (!controller.signal.aborted)
+            setUploadError(
+              "We couldn’t set up photo sharing for you. Please try again.",
+            );
+        }
+      }
+    })();
+    return () => controller.abort();
+  }, [share, token, event]);
 
   async function copy(privateLink: boolean) {
     if (!token) return;
@@ -141,6 +192,26 @@ export function HostPage({ share }: { share: string }) {
             )}
           </Card>
           <HostParticipants event={event} token={token} />
+          {participantToken && participant && (
+            <IntakePanel
+              key={`${share}:${participantToken}`}
+              share={share}
+              token={participantToken}
+              participant={participant}
+              onPreferencesUpdated={setParticipant}
+              onUploaded={() => setAlbumRevision((value) => value + 1)}
+            />
+          )}
+          {uploadError && (
+            <p role="alert" className="mt-4 text-sm text-negative">
+              {uploadError}
+            </p>
+          )}
+          <SharedAlbum
+            key={`${share}:${token}:${albumRevision}`}
+            share={share}
+            token={token}
+          />
           <section className="mt-9 border-t border-border pt-7">
             <h2 className="text-lg font-semibold tracking-tight">
               Keep your host access

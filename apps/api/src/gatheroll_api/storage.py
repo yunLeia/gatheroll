@@ -5,6 +5,7 @@ Settings and this client are process-cached: restart the API after editing .env.
 
 from functools import lru_cache
 from typing import TYPE_CHECKING
+from urllib.parse import quote
 
 import boto3
 from botocore.config import Config
@@ -67,6 +68,22 @@ class Storage:
         return self.client.generate_presigned_url(
             "get_object",
             Params={"Bucket": self.settings.r2_bucket_name, "Key": key},
+            ExpiresIn=self.settings.photo_get_ttl_seconds,
+        )
+
+    def create_original_url(self, key: str, filename: str, *, download: bool) -> str:
+        # Encode untrusted filenames; never interpolate raw CR/LF or path segments.
+        safe_name = filename.replace("\\", "/").rsplit("/", 1)[-1] or "photo"
+        disposition = "attachment" if download else "inline"
+        return self.client.generate_presigned_url(
+            "get_object",
+            Params={
+                "Bucket": self.settings.r2_bucket_name,
+                "Key": key,
+                "ResponseContentDisposition": (
+                    f"{disposition}; filename*=UTF-8''{quote(safe_name, safe='')}"
+                ),
+            },
             ExpiresIn=self.settings.photo_get_ttl_seconds,
         )
 

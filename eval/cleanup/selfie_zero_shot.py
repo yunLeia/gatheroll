@@ -13,12 +13,31 @@ from pathlib import Path
 
 DEFAULT_MODEL = "google/siglip2-base-patch16-224"
 
-# Prompt wording matters for zero-shot quality; these three are deliberately
+# Prompt wording matters for zero-shot quality; these are deliberately
 # mutually exclusive framings of "who is this photo of, from whose camera."
+# v2 (2026-09-08): the original 3-way set had no "none of these" option, so
+# every screenshot and blurry camera photo in the real 49-photo set was
+# forced into one of the 3 person-photo labels -- it landed on "selfie" in
+# 31/31 of those cases, which is what actually produced the earlier 96.9%
+# false-positive rate, not a genuine selfie-vs-portrait confusion. Added
+# screenshot and other_no_selfie as real competing categories so the model
+# isn't forced to choose among only positive-class prompts.
+#
+# FROZEN 2026-09-08. Do not edit these prompts against the 49-photo
+# development set (eval_data/cleanup-manifest.json) again -- they were
+# already revised once after inspecting errors on those same 49 photos, so
+# the resulting 1.00/1.00 result (report 008) is a development-set result,
+# not a held-out one. Next change to this dict must be evaluated against a
+# separate, not-yet-created holdout set (~15-25 photos, per direction),
+# not this one. If you're tempted to tweak wording after looking at an
+# error on one of these 49 photos, stop -- that's exactly the thing being
+# guarded against here.
 PROMPTS = {
     "selfie": "a selfie photograph taken by the person who appears in it, arm's length or mirror",
     "portrait_by_other": "a portrait photograph of one person, taken by someone else holding the camera",
     "group_photo": "a group photo of multiple people posing together",
+    "screenshot": "a screenshot of a mobile app or phone screen, not a camera photo",
+    "other_no_selfie": "a photograph of scenery, objects, food, or a blurry/out-of-focus camera shot with no clear posed subject",
 }
 
 

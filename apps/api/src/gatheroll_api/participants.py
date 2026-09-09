@@ -71,9 +71,50 @@ def list_participants(event: HostDep, session: SessionDep) -> list[Participant]:
             select(Participant)
             .where(
                 Participant.event_id == event.id,
+                Participant.is_host.is_(False),
             )
             .order_by(Participant.joined_at, Participant.id)
         )
+    )
+
+
+@router.post("/host", response_model=ParticipantJoined)
+def host_participant(event: HostDep, session: SessionDep) -> ParticipantJoined:
+    """Get-or-create the host's own participant identity so they can upload too.
+
+    Idempotent, but the returned token is fresh every call: like manage_token,
+    participant_token_hash is one-way, so a repeat call cannot return the
+    original plaintext and must rotate instead. Safe because only the host's
+    own management token can ever reach this endpoint.
+    """
+    token = new_token()
+    now = datetime.now(UTC)
+    participant = session.scalar(
+        select(Participant)
+        .where(Participant.event_id == event.id, Participant.is_host.is_(True))
+        .with_for_update()
+    )
+    if participant is None:
+        participant = Participant(
+            id=uuid4(),
+            event_id=event.id,
+            display_name="Host",
+            participant_token_hash=hash_token(token),
+            joined_at=now,
+            status=ParticipantStatus.APPROVED,
+            approved_at=now,
+            include_selfies=True,
+            include_screenshots=False,
+            is_host=True,
+        )
+        session.add(participant)
+    else:
+        participant.participant_token_hash = hash_token(token)
+    session.commit()
+    session.refresh(participant)
+    return ParticipantJoined(
+        participant=ParticipantResponse.model_validate(participant),
+        participant_token=token,
     )
 
 

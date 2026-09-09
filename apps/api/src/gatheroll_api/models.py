@@ -8,9 +8,11 @@ from sqlalchemy import (
     DateTime,
     Enum,
     ForeignKey,
+    Index,
     String,
     UniqueConstraint,
     false,
+    text,
     true,
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
@@ -68,6 +70,12 @@ class Participant(Base):
             "(status != 'approved' AND approved_at IS NULL)",
             name="participant_approval_timestamp",
         ),
+        Index(
+            "participant_one_host_per_event",
+            "event_id",
+            unique=True,
+            postgresql_where=text("is_host"),
+        ),
     )
 
     id: Mapped[UUID] = mapped_column(primary_key=True)
@@ -87,6 +95,8 @@ class Participant(Base):
     approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     include_selfies: Mapped[bool] = mapped_column(server_default=true())
     include_screenshots: Mapped[bool] = mapped_column(server_default=false())
+    # At most one per event; enforced by a partial unique index (see migration 0007).
+    is_host: Mapped[bool] = mapped_column(server_default=false())
     event: Mapped[Event] = relationship(back_populates="participants")
 
 

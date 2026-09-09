@@ -8,6 +8,24 @@ import type {
 export const UPLOAD_CONCURRENCY = 3;
 const PUT_TIMEOUT_MS = 120_000;
 
+// Duck-types rather than importing ApiError from @/lib/api, so this file
+// (and its standalone-transpiled tests) stay dependency-free. A present
+// numeric `status` means the server responded and rejected the request
+// itself (client payload problem, most likely) -- storage/connection are
+// not the right things to blame for a 4xx. No status at all means the
+// request never got a response (offline, timeout, DNS, CORS).
+function initializeErrorMessage(cause: unknown): string {
+  const status =
+    cause && typeof cause === "object" && "status" in cause
+      ? (cause as { status: unknown }).status
+      : undefined;
+  if (typeof status === "number" && status >= 500)
+    return "The server couldn't prepare this upload. Try again in a moment.";
+  if (typeof status === "number")
+    return "This upload couldn't be prepared. Refresh the page, reselect your photos, and retry.";
+  return "Couldn't reach the server to start this upload. Check your connection, then retry.";
+}
+
 export async function putObject(
   target: UploadTarget,
   body: Blob,
@@ -48,14 +66,13 @@ export async function uploadBatch(
       pending.map((job) => job.input),
       signal,
     );
-  } catch {
+  } catch (cause) {
     if (!signal.aborted)
       pending.forEach((job) =>
         update({
           ...job,
           state: "failed",
-          error:
-            "Could not authorize upload. Check storage setup, limits, or connection, then retry.",
+          error: initializeErrorMessage(cause),
         }),
       );
     return;

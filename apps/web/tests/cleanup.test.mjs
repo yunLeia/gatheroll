@@ -6,6 +6,7 @@ const { computeBlurScore, possiblyBlurry } = require("../.eval-build/features/cl
 const { validateCleanupDataset } = require("../.eval-build/evaluation/cleanup-dataset.js");
 const { binaryMetrics, binaryErrorKind, binaryErrorsMarkdown } = require("../.eval-build/evaluation/cleanup-reporting.js");
 const { isLikelyScreenshot } = require("../.eval-build/features/cleanup/screenshot.js");
+const { hybridScreenshotDecision } = require("../.eval-build/features/cleanup/screenshot-hybrid.js");
 
 function solid(width, height, value) {
   const data = new Uint8ClampedArray(width * height * 4).fill(value);
@@ -140,6 +141,26 @@ test("require_missing_camera_exif, when true, also requires absent camera EXIF",
   );
 });
 
+test("hybridScreenshotDecision: agreement is confident, disagreement stays uncertain", () => {
+  const png = { content_type: "image/png", has_camera_exif: false };
+  const heic = { content_type: "image/heic", has_camera_exif: true };
+  // Both signals agree -> confident either direction.
+  assert.equal(hybridScreenshotDecision("screenshot", png).decision, "screenshot");
+  assert.equal(hybridScreenshotDecision("camera_photo", heic).decision, "camera_photo");
+  // Visual says screenshot but format contradicts (the exact real-data
+  // failure mode: SigLIP2's 4 false positives on the real 49-photo set were
+  // all HEIC camera photos it misread as screenshots) -> stays reviewable,
+  // never silently trusts the visual signal alone.
+  assert.equal(hybridScreenshotDecision("screenshot", heic).decision, "uncertain");
+  // Visual says camera photo but format suggests screenshot -> also uncertain.
+  assert.equal(hybridScreenshotDecision("camera_photo", png).decision, "uncertain");
+});
+test("hybridScreenshotDecision records which signals contributed, for explainability", () => {
+  const result = hybridScreenshotDecision("screenshot", { content_type: "image/png", has_camera_exif: false });
+  assert.ok(result.evidence.some((line) => line.includes("visual classifier: screenshot")));
+  assert.ok(result.evidence.some((line) => line.includes("image/png")));
+});
+
 const { faceHeuristicDecision, compareSelfieBaselines } = require("../.eval-build/evaluation/cleanup-selfie-compare.js");
 
 test("faceHeuristicDecision requires at least one centered, sufficiently large face", () => {
@@ -168,7 +189,85 @@ test("compareSelfieBaselines reports both techniques over the same labeled rows"
   assert.equal(report.siglip_zero_shot.tn, 1);
 });
 
-const { groupExactDuplicates } = require("../.eval-build/features/cleanup/duplicates.js");
+const {
+  cleanupSuggestions,
+  CLEANUP_CONFIG,
+} = require("../.eval-build/features/cleanup/suggestions.js");
+
+test("cleanupSuggestions flags photos with a blur_score below the configured threshold", () => {
+  const config = { version: "v", blur_threshold: 100 };
+  const r = cleanupSuggestions(
+    [
+      { client_id: "a", blur_score: 50, content_hash: null },
+      { client_id: "b", blur_score: 150, content_hash: null },
+    ],
+    [],
+    config,
+  );
+  assert.deepEqual([...r.blurryIds], ["a"]);
+});
+test("cleanupSuggestions never flags a null blur_score (not yet computed, never fabricated)", () => {
+  const r = cleanupSuggestions(
+    [{ client_id: "a", blur_score: null, content_hash: null }],
+    [],
+    { version: "v", blur_threshold: 100 },
+  );
+  assert.equal(r.blurryIds.size, 0);
+});
+test("cleanupSuggestions groups exact-duplicate content hashes, ignores null hashes and singletons", () => {
+  const r = cleanupSuggestions(
+    [
+      { client_id: "a", blur_score: null, content_hash: "h1" },
+      { client_id: "b", blur_score: null, content_hash: "h1" },
+      { client_id: "c", blur_score: null, content_hash: null },
+      { client_id: "d", blur_score: null, content_hash: "h2" },
+    ],
+    [],
+    { version: "v", blur_threshold: 100 },
+  );
+  assert.deepEqual(r.duplicateGroups, [["a", "b"]]);
+});
+test("cleanupSuggestions flags a selection matching an already-uploaded photo by filename+size", () => {
+  const r = cleanupSuggestions(
+    [
+      {
+        client_id: "a",
+        blur_score: null,
+        content_hash: null,
+        original_filename: "IMG_1.JPG",
+        file_size_bytes: 100,
+      },
+      {
+        client_id: "b",
+        blur_score: null,
+        content_hash: null,
+        original_filename: "IMG_2.JPG",
+        file_size_bytes: 200,
+      },
+    ],
+    [{ original_filename: "IMG_1.JPG", file_size_bytes: 100 }],
+  );
+  assert.deepEqual([...r.alreadyUploadedIds], ["a"]);
+});
+test("cleanupSuggestions defaults to CLEANUP_CONFIG when no config is passed", () => {
+  const r = cleanupSuggestions([
+    { client_id: "a", blur_score: CLEANUP_CONFIG.blur_threshold - 1, content_hash: null },
+  ]);
+  assert.equal(r.blurryIds.has("a"), true);
+});
+
+const { groupExactDuplicates, alreadyUploadedIds } = require("../.eval-build/features/cleanup/duplicates.js");
+
+test("alreadyUploadedIds matches on filename+size, ignores non-matches, empty stored", () => {
+  const selected = [
+    { client_id: "a", original_filename: "x.jpg", file_size_bytes: 10 },
+    { client_id: "b", original_filename: "x.jpg", file_size_bytes: 20 },
+    { client_id: "c", original_filename: "y.jpg", file_size_bytes: 10 },
+  ];
+  const stored = [{ original_filename: "x.jpg", file_size_bytes: 10 }];
+  assert.deepEqual([...alreadyUploadedIds(selected, stored)], ["a"]);
+  assert.equal(alreadyUploadedIds(selected, []).size, 0);
+});
 
 test("groupExactDuplicates groups items sharing a hash and omits singletons", () => {
   const items = [
