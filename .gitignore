@@ -17,6 +17,8 @@ __pycache__/
 .env
 .env.local
 .DS_Store
+.wrangler/
+.vercel/
 
 # Local private evaluation originals, manifests, derived metadata and results
 eval_data/
