@@ -8,9 +8,11 @@ from sqlalchemy import (
     DateTime,
     Enum,
     ForeignKey,
+    Index,
     String,
     UniqueConstraint,
     false,
+    text,
     true,
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
@@ -67,6 +69,12 @@ class Participant(Base):
             "(status = 'approved' AND approved_at IS NOT NULL) OR "
             "(status != 'approved' AND approved_at IS NULL)",
             name="participant_approval_timestamp",
+        ),
+        Index(
+            "participant_one_host_per_event",
+            "event_id",
+            unique=True,
+            postgresql_where=text("is_host"),
         ),
     )
 
