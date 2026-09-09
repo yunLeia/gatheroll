@@ -52,7 +52,7 @@ export default function Home() {
           {[
             "Create an event",
             "Friends scan and join",
-            "Select broadly, review privately",
+            "Select photos and share",
             "Enjoy one shared album",
           ].map((step, i) => (
             <li

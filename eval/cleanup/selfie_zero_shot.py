@@ -22,6 +22,16 @@ DEFAULT_MODEL = "google/siglip2-base-patch16-224"
 # false-positive rate, not a genuine selfie-vs-portrait confusion. Added
 # screenshot and other_no_selfie as real competing categories so the model
 # isn't forced to choose among only positive-class prompts.
+#
+# FROZEN 2026-09-08. Do not edit these prompts against the 49-photo
+# development set (eval_data/cleanup-manifest.json) again -- they were
+# already revised once after inspecting errors on those same 49 photos, so
+# the resulting 1.00/1.00 result (report 008) is a development-set result,
+# not a held-out one. Next change to this dict must be evaluated against a
+# separate, not-yet-created holdout set (~15-25 photos, per direction),
+# not this one. If you're tempted to tweak wording after looking at an
+# error on one of these 49 photos, stop -- that's exactly the thing being
+# guarded against here.
 PROMPTS = {
     "selfie": "a selfie photograph taken by the person who appears in it, arm's length or mirror",
     "portrait_by_other": "a portrait photograph of one person, taken by someone else holding the camera",

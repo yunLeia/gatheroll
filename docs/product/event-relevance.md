@@ -1,5 +1,11 @@
 # Gatheroll relevance model — 2026-09-07 (superseded 2026-09-08)
 
+> **Product correction (2026-09-08, ADR 008):** uploading selected photos is the
+> sharing action for the event; no separate post-upload sharing confirmation is
+> required. Earlier private-staging/confirmation language below is superseded.
+> The shared album now serves the host and every approved participant (ADR 009).
+> See [ADR 008](../adr/008-upload-is-event-sharing.md).
+
 ## Superseded — 2026-09-08
 
 **Event relevance is no longer an AI target for V1.** [ADR 007](../adr/007-cleanup-first-ai-direction.md)

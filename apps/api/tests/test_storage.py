@@ -65,3 +65,21 @@ def test_missing_head_maps_to_retryable_conflict() -> None:
     with pytest.raises(HTTPException) as exc:
         service.verify_object("key", "image/jpeg", 123)
     assert exc.value.status_code == 409
+
+
+@pytest.mark.parametrize("download,mode", [(False, "inline"), (True, "attachment")])
+def test_original_signing_disposition_and_filename(download: bool, mode: str) -> None:
+    query = parse_qs(
+        urlparse(
+            storage().create_original_url(
+                "server-controlled/original", '../../사진\r\n".HEIC', download=download
+            )
+        ).query
+    )
+    disposition = query["response-content-disposition"][0]
+    assert disposition.startswith(f"{mode}; filename*=UTF-8''")
+    assert "%0D%0A%22" in disposition
+    assert (
+        "../" not in disposition and "\r" not in disposition and "\n" not in disposition
+    )
+    assert query["X-Amz-Expires"] == ["300"]

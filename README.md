@@ -63,8 +63,8 @@ manual work instead of re-deciding something the user already decided.
 ## Current status
 
 The repository implements event creation, host management, QR invitations,
-no-account participant approval, and private photo intake. Photo sharing and AI
-are not implemented:
+no-account participant approval, photo uploads, and a shared event album.
+Production selfie/screenshot classifiers remain deferred:
 
 - a mobile-first Next.js frontend
 - a FastAPI backend with `GET /health`
@@ -74,15 +74,17 @@ are not implemented:
 - Private (approval required, default) / Public (instant join) policies; both unlisted
 - participant pending/approved/rejected states and browser restoration
 - approved participant multi-photo picker, previews and bounded direct-to-R2 uploads
-- private own-photo listing, partial failure/retry, and refresh of confirmed uploads
-- four Alembic migrations and PostgreSQL authorization/state tests
+- own-upload listing, partial failure/retry, and refresh of confirmed uploads
+- shared album for hosts and approved participants, paginated thumbnails and original downloads
+- Alembic migrations and PostgreSQL authorization/state tests
 - backend Docker support
 - lint, type-check, test, and CI foundations
 - architectural decision records written as decisions are made
 
 Host and participant authentication use secret capabilities, without accounts.
-No AI, shared album, host access to participant photos, or account login is implemented.
-Originals and thumbnails are private objects, not automatically shared photos.
+Completing an upload shares it with the event; no second confirmation is required.
+Originals and thumbnails remain private storage objects served through short-lived
+signed URLs after event-scoped authorization. No account login is required.
 
 ## Evaluation
 
@@ -117,8 +119,10 @@ Mobile browser (Next.js UI)
 
 Neither Next.js nor FastAPI proxies photo bytes. FastAPI verifies the participant,
 creates photo records, signs uploads, and checks R2 metadata before confirming
-`uploaded_private`. Own previews use short-lived signed GETs, not public URLs.
-No embeddings, image analysis, shared grid or background processing is present.
+`uploaded_private` (retained storage lifecycle name). The shared album includes all
+completed uploads, including existing ones; unfinished uploads are hidden.
+Original URLs are signed on demand. Offline classifier experiments stay outside
+this runtime path.
 
 ## Repository structure
 
@@ -342,15 +346,14 @@ records implementation, tests, physical-device evidence and remaining limitation
 
 ```text
 Approved participant → Add photos → explicit system selection → previews
-→ Upload privately → batch authorization → browser PUTs to private R2
-→ HEAD-verified completion → uploaded_private → refresh own uploads
+→ Upload and share → batch authorization → browser PUTs to private R2
+→ HEAD-verified completion → event album for host and approved participants
 ```
 
 The picker does not scan the whole camera roll. Selection does not start upload;
-the participant explicitly confirms **Upload privately**. Originals may include
-unrelated images and EXIF/location data. Uploaded is not shared: neither other
-participants nor the host can list these private photos. Sharing needs a later
-explicit user-confirmed workflow. Participants can set preferences (include_selfies,
+the participant explicitly confirms **Upload and share**. Originals may include
+EXIF/location data, as explained before upload. Completed uploads are visible
+to the host and every approved participant. Participants can set preferences (include_selfies,
 include_screenshots) before upload, but these are stored and not yet enforced by
 any automatic filtering or removal of uploaded photos.
 
@@ -376,6 +379,18 @@ accepted. Three concurrent file jobs, sequential thumbnail preparation, 384px JP
 long side. Unsupported decoding gets a fallback; HEIC rendering is not universally
 promised. Captured time requires EXIF time plus explicit offset; GPS/dimensions are
 nullable and untrusted. Missing metadata is not a negative relevance signal.
+
+Shared album endpoints accept either the event host token or an approved
+participant token for that event:
+
+- `GET /events/{share}/album?offset=0`: 50 thumbnails per page, ordered by creation
+  time and ID; `next_offset` supports Load more. No GPS or storage keys in JSON.
+- `GET /events/{share}/album/{photo_id}/original?download=false`: fresh signed
+  inline original URL. `download=true` signs attachment disposition for download.
+- Pending/rejected participants, foreign-event credentials, and unauthenticated
+  visitors cannot access the album. Missing/pending/foreign photos return 404
+  after authorization. HEIC display depends on browser support; download remains
+  available. Refresh renews thumbnails; reopening a photo renews the original.
 
 All `/events/{share}/photos` endpoints require an approved participant token:
 `GET /limits`, `POST /uploads` (batch metadata → signed targets),

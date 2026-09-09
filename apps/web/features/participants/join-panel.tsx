@@ -10,10 +10,12 @@ import {
 import { usePolling } from "@/lib/use-polling";
 import { Field } from "@/components/ui/field";
 import { Button } from "@/components/ui/button";
+import { SharedAlbum } from "@/features/photos/shared-album";
 import { IntakePanel } from "@/features/photos/intake-panel";
 
 export function JoinPanel({ event }: { event: EventInfo }) {
   const share = event.share_token;
+  const [albumRevision, setAlbumRevision] = useState(0);
   const [restored, setRestored] = useState(false);
   const [token, setToken] = useState<string | null>(null);
   const [participant, setParticipant] = useState<Participant | null>(null);
@@ -139,19 +141,27 @@ export function JoinPanel({ event }: { event: EventInfo }) {
             {participant.status === "pending"
               ? "Waiting for the host to let you in…"
               : participant.status === "approved"
-                ? "You can now add your photos privately."
+                ? "You can now share photos and browse the event album."
                 : "You can check with the person who invited you."}
           </p>
         </>
       )}
       {participant && participant.status === "approved" && token && !invalid && (
-        <IntakePanel
-          key={share}
-          share={share}
-          token={token}
-          participant={participant}
-          onPreferencesUpdated={setParticipant}
-        />
+        <>
+          <IntakePanel
+            key={share}
+            share={share}
+            token={token}
+            participant={participant}
+            onPreferencesUpdated={setParticipant}
+            onUploaded={() => setAlbumRevision((value) => value + 1)}
+          />
+          <SharedAlbum
+            key={`${share}:${token}:${albumRevision}`}
+            share={share}
+            token={token}
+          />
+        </>
       )}
       {!persistent && (
         <p role="status" className="mt-4 text-sm text-caution">

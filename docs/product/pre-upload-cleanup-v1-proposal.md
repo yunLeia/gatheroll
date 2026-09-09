@@ -1,5 +1,11 @@
 # Pre-upload Cleanup v1 — technical proposal (not yet implemented)
 
+> **Product correction (2026-09-08, ADR 008):** uploading selected photos is the
+> sharing action for the event; no separate post-upload sharing confirmation is
+> required. Earlier private-staging/confirmation language below is superseded.
+> The shared album now serves the host and every approved participant (ADR 009).
+> See [ADR 008](../adr/008-upload-is-event-sharing.md).
+
 > **Update, 2026-09-08 (same day):** v1 shipped (blur, screenshot metadata
 > heuristic, exact duplicate, selfie offline comparison) — see
 > `docs/STATUS.md`. Screenshot and selfie's *production* direction has

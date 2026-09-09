@@ -87,6 +87,8 @@ class Participant(Base):
     approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     include_selfies: Mapped[bool] = mapped_column(server_default=true())
     include_screenshots: Mapped[bool] = mapped_column(server_default=false())
+    # At most one per event; enforced by a partial unique index (see migration 0007).
+    is_host: Mapped[bool] = mapped_column(server_default=false())
     event: Mapped[Event] = relationship(back_populates="participants")
 
 

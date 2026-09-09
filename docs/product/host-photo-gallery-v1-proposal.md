@@ -1,5 +1,11 @@
 # Host photo gallery v1 — UX/product proposal (not yet implemented)
 
+> **Product correction (2026-09-08, ADR 008):** uploading selected photos is the
+> sharing action for the event; no separate post-upload sharing confirmation is
+> required. Earlier private-staging/confirmation language below is superseded.
+> The shared album now serves the host and every approved participant (ADR 009).
+> See [ADR 008](../adr/008-upload-is-event-sharing.md).
+
 2026-09-08. Proposal only — pending Codex review/build of the backend piece.
 No frontend or backend code written against this yet.
 

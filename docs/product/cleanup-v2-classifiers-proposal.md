@@ -1,9 +1,24 @@
 # Pre-upload Cleanup v2 — screenshot/selfie classifiers, evaluated
 
-2026-09-08. Proposal only — evaluation is real and complete; **no production
-code has been wired in.** Nothing in `apps/api` or the live intake flow
-changed. Per direction: wait for approval before wiring these classifiers
-into production.
+> **Second correction (2026-09-09), superseding the one below:** ADR 008's
+> "upload is sharing, no confirmation step" is itself being reversed — see
+> §4 and §5. Storage completion and album visibility are separate states;
+> a participant must explicitly confirm before anything becomes visible to
+> the host or other participants. ADR 009's one-album-for-everyone read
+> contract is unaffected. Nothing in `apps/api` changed yet; this is a
+> proposal for ADR 010 to formalize.
+
+> **First correction (2026-09-08, ADR 008), now itself superseded above:**
+> uploading selected photos is the sharing action for the event; no
+> separate post-upload sharing confirmation is required. See
+> [ADR 008](../adr/008-upload-is-event-sharing.md) /
+> [ADR 009](../adr/009-shared-event-album.md) for the historical record of
+> that decision.
+
+2026-09-08 (evaluation), revised 2026-09-09 (state model). Proposal only —
+evaluation is real and complete; **no production code has been wired in.**
+Nothing in `apps/api` or the live intake flow changed. Per direction: wait
+for approval before wiring anything into production.
 
 ## Why this, why now
 
@@ -62,13 +77,24 @@ negatives, 49/49 correct.** All 31 previously-misclassified screenshots
 and blurry photos now correctly route to their own categories instead of
 being forced into "selfie."
 
-**Honesty check on "perfect":** n=49 with only 17 positives is small, and
-this set is a limited sample (few distinct people/devices/settings) — a
-single new misclassification on a larger or more diverse set would
-meaningfully move these numbers. Treat this as strong evidence the
-corrected-prompt approach is sound, not proof of production-grade accuracy
-at scale. Growing the labeled set remains real, unfinished work
-(`docs/STATUS.md`'s existing note).
+**Honesty check on "perfect" — stronger caveat, 2026-09-08:** this is a
+**development-set result, not a held-out one.** The prompt set was revised
+*after inspecting errors on these same 49 photos*, which is exactly how a
+result stops being a fair test — 1.00/1.00 measures "did the fix work on
+the photos that motivated the fix," not "does this generalize." n=49 with
+only 17 positives compounds that: a single new misclassification on a
+larger or more diverse set (more people, devices, settings) would move
+these numbers a lot.
+
+**Safeguard, per direction:** the prompt set (`selfie_zero_shot.py`) is now
+**frozen** — a comment marks it and explains why. It must not be tuned
+further against this 49-photo set. Before any further change, a separate,
+not-yet-created holdout set (~15-25 unseen photos) needs to exist and the
+frozen classifier re-run against it unchanged. Growing/holding out that
+set remains real, unfinished work — this proposal's production-slice
+recommendation below does **not** wait on it, per direction, but the
+accuracy claim above should be read as "promising on development data,"
+not "validated."
 
 **Recommendation:** SigLIP2 zero-shot (5-way prompts) for selfie, no
 hybrid — unlike screenshot, no metadata signal exists for "is this a
@@ -140,7 +166,96 @@ inputs.
   deterministic. Untouched. `alreadyUploadedIds()` (added this session for
   the cross-batch gap) is unrelated and also untouched here.
 
-## 4. Data model — new signals, kept separate from album labels
+## 4. State model: Selected → Review → Shared (revised 2026-09-09)
+
+**Correction, same day as ADR 008/009:** an earlier draft of this section
+assumed post-upload classification necessarily lands after a photo is
+already shared, because ADR 008 equated upload completion with sharing.
+Direction received: that coupling is itself what needs revisiting, not a
+constraint to design around. Storage completion and album visibility are
+two separate, independently-tracked states — the sections below (and §5,
+the required ADR changes) implement that correction.
+
+**User-facing lifecycle — exactly three states, no other name for a
+photo's state is ever shown to a participant:**
+
+- **Selected** — client-side, before any network call. Nothing has left
+  the browser.
+- **Review** — sharing is in progress. Bytes may already be uploading or
+  fully uploaded to private storage; blur/duplicate suggestions appear
+  immediately (client-computed, unchanged); selfie/screenshot suggestions
+  appear as async server analysis finishes. The participant can inspect
+  every flagged thumbnail and exclude any of them. **Nothing is visible to
+  the host or other participants yet.**
+- **Shared** — the participant has explicitly confirmed. Only the
+  confirmed (non-excluded) photos become visible in the album.
+
+**Internal states (never shown to a user as such):**
+
+- Storage — `Photo.status`: `pending_upload` → `uploaded_private`.
+  Unchanged in meaning from today. Describes whether bytes exist in R2.
+  Nothing about this name or value is user-facing.
+- Publication — **new**: `Photo.shared_at: timestamp | null`. `NULL` = not
+  visible to anyone but the uploader (whether never-confirmed, or
+  confirmed-then-later-hidden). A set timestamp = visible in the album.
+  **This is the only field the album's read query should gate on** —
+  storage completion alone must no longer imply album membership.
+
+A photo sitting at `status = uploaded_private` (bytes safely stored) while
+`shared_at IS NULL` (invisible to everyone else) for as long as the
+participant is still in Review is the intended, central mechanism here —
+not a bug to eliminate the way ADR 008 treated it.
+
+**Bounded wait, not a hard gate:** Review requests the photo's
+classification status; if `classified_at` isn't set within a short window
+(proposed ~8s — the measured ~200ms/image inference cost times a generous
+margin for queueing) the UI shows whatever's ready and lets the
+participant proceed regardless. Share is never blocked on classification
+finishing. If classification finishes *after* Share, the result still
+attaches to the now-shared photo and remains actionable — un-setting
+`shared_at` is the same "hide from album" action whether it happens before
+or after the initial Share, so no separate post-share suggestion concept
+is needed.
+
+**Scope correction from the previous draft:** that draft also proposed
+storing `content_hash` server-side to support cross-participant duplicate
+detection in the album. Not part of this slice — the Review step only
+needs to compare a participant's own current selection against their own
+in-flight batch, which the client already does today with no server
+changes. Cross-participant duplicate detection stays exactly where
+`docs/STATUS.md` already had it: explicitly deferred.
+
+## 5. What has to change in ADR 008 and ADR 009
+
+Both were accepted the same day, before this correction. ADR 009's read
+contract (one album endpoint for host + participants, pagination, signed
+URLs, original/download links) is unaffected and stands. What changes is
+the piece that equates storage completion with sharing.
+
+**ADR 008 ("Upload is the event-sharing action") — the central decision
+is reversed, not refined:**
+
+| | ADR 008 as accepted | Needed change |
+|---|---|---|
+| Decision | "Participants select photos and complete upload to share them with the event. There is no separate post-upload confirmation or private staging review step." | Uploading stores bytes; it is not the sharing action. A participant must explicitly confirm (**Shared**) before a photo becomes visible to anyone else. |
+| Consequences | "post-upload classification cannot prevent a photo from being shared on upload" | Post-upload classification *can* inform Review before Share, and remains actionable (hide-from-album) after Share — it still never auto-excludes either way; that principle was never actually in question, only the timing was. |
+| Framing | The private-staging/confirmation alternative "was explicitly rejected as the product rule." | That rejection is what's being overturned by this direction. Worth stating plainly rather than quietly reintroducing the same shape under a different name. |
+
+**ADR 009 ("One event album...") — one query condition changes:**
+
+| | ADR 009 as accepted | Needed change |
+|---|---|---|
+| Album membership filter | `Photo.status == PhotoStatus.UPLOADED_PRIVATE` is the sole condition (`album.py`: `list_album`, `original`) | Add `Photo.shared_at IS NOT NULL` as a second required condition — storage alone no longer implies membership. |
+| Existing uploaded photos | "Completed uploads, including existing ones, are event contributions under the corrected upload-is-sharing rule." | Needs an explicit decision: backfill `shared_at = uploaded_at` for every photo already uploaded under the old (now-reversed) rule, so nobody loses visibility of what was genuinely already shared at the time. Leaving them un-shared would silently hide real content — backfilling is almost certainly correct, but it's a real migration decision, not a no-op. |
+
+**Recommendation:** write this as a new ADR (010) that supersedes 008 and
+amends 009's read contract, rather than editing the accepted 008/009 files
+directly — 008/009 were real decisions at the time; 010 is the correction,
+same pattern this project already uses (ADR 007 superseding earlier
+direction). Not written yet — this table is what 010 would need to say;
+confirm before I draft it as a file.
+
+## 6. Data model
 
 As directed, these are cleanup-pipeline outputs, not the later
 smart-filter album categories (people/food/scenery/candid/selfie-as-a-
@@ -148,6 +263,11 @@ browsing-category) — different product purpose, different lifecycle,
 should never share a column or a type:
 
 ```
+-- publication (new, see §4 — the actual mechanism this whole
+-- revision is about)
+shared_at: timestamp | null
+
+-- cleanup signals (async-classified)
 is_screenshot: boolean | null       # null = not yet classified
 screenshot_decision: "screenshot" | "camera_photo" | "uncertain"
 screenshot_evidence: string[]       # explainability trail, e.g.
@@ -160,46 +280,60 @@ selfie_evidence: { selfie: number, portrait_by_other: number,
 classified_at: timestamp | null
 ```
 
-`blur_score` / `possibly_blurry` already exist as client-computed
-`PhotoInput` fields (unchanged, not server-stored — matches the existing
-architecture). `exact_duplicate_group` is **not** part of this slice:
-storing `content_hash` server-side was already explicitly deferred
-(`docs/STATUS.md`'s "explicitly still out of scope" list, ADR 007) and
-nothing here changes that — duplicate detection stays exactly where it is,
-client-side and pre-upload.
+`blur_score` / `possibly_blurry` stay exactly as they are today —
+client-computed `PhotoInput` fields, not server-stored, since Review's
+blur/duplicate suggestions are entirely client-side and need no server
+round-trip.
 
-## 5. Inference/runtime placement — measured, not guessed
+## 7. Inference/runtime placement — measured, not guessed
 
-**Measured on this dev machine (CPU, no GPU — the conservative case for a
+**Latency (this dev machine, CPU, no GPU — the conservative case for a
 typical small production VM, which also likely has no GPU):**
 
-- Model load (`google/siglip2-base-patch16-224`, cold): **~5.1s**
-- Per-image inference (warm): **~170-210ms**
-- Checkpoint size on disk: **1.4 GB**
+| | value |
+|---|---|
+| Model load (cold) | ~3-5s (varied across runs) |
+| Per-image inference, n=1 | 417ms |
+| Per-image inference, n=10 (avg) | 274ms |
+| Per-image inference, n=30 (avg) | 220ms |
+| Checkpoint size on disk | 1.4 GB |
 
-These numbers directly answer the "measure latency first" requirement:
-5 seconds is a real, one-time cost that must not happen per-request (load
-once, keep the process warm); ~200ms/photo means a 20-photo batch is ~4s of
-CPU-bound work — noticeable, needs to happen off the upload response path,
-but nowhere near large enough to justify a queue/broker for a low-traffic
-app.
+**Memory (`eval/cleanup/measure_memory.py`, `measure_memory_growth.py` —
+throwaway measurement scripts, not part of the eval CLI):**
+
+| | RSS |
+|---|---|
+| Before any ML imports | 17 MB |
+| After importing torch/transformers/PIL | 302 MB |
+| After model load | 551 MB |
+| After 30 images | 1,078 MB |
+| **Peak during inference** (sampled + `ru_maxrss` cross-check) | **1,325 MB** |
+| Extended run, 200 images (10 real files cycled) | oscillates 787-1,272 MB — **no unbounded growth**, allocator caching + GC, not a leak |
+
+**Multi-worker implication — the finding that actually changes the
+recommendation:** model state doesn't share across OS processes. If
+inference runs inside the same process pool as the API's request-handling
+workers, **each worker independently duplicates the full ~550MB-1.3GB**. A
+typical 4-worker API deployment would carry 2.2-5.2GB just for model
+memory — likely exceeds a small/cheap production instance entirely.
+
+**Revised recommendation:** don't embed inference in the API's own
+multi-worker pool. Run it as **one separate, single-instance process** —
+still zero new infra (not Redis, not Celery, no queue — just a second
+long-running Python process, the same way `apps/api` and `apps/web` are
+already two separate processes today), called via a plain internal HTTP
+request from `apps/api`'s `BackgroundTask`. Load the model once at that
+process's startup, not per-request. None of the measured numbers justify
+Redis/a queue/a vector DB at this scale; if load time or latency becomes a
+real problem under real traffic (evidence-gated, same principle this
+project already follows elsewhere), that's the trigger to revisit — not a
+default.
 
 **Do not run this in the mobile browser.** 1.4 GB and a real
 vision-language model are far outside what this project has been willing
 to spend client-side even for much cheaper checks (the brief itself
 resists adding a Web Worker "unless measurements show it's needed" for
 work orders of magnitude lighter than this).
-
-**Smallest server-side path (proposed, not built):** run inference
-in-process inside `apps/api`, using FastAPI's built-in `BackgroundTasks`
-(zero new infra) triggered after `POST /photos/{id}/complete` confirms an
-upload. Load the model once at API process startup, not per-request. No
-Redis, no Celery/Upstash, no job queue, no vector DB — none of the
-measured numbers justify that infrastructure yet. If model load time or
-per-photo latency becomes a real problem under real traffic (evidence-
-gated, same principle this whole project already follows), splitting
-inference into its own small service is the natural next step — not a
-default.
 
 **HEIC:** the server-side classification path needs **no new HEIC
 handling**. `pillow_heif.register_heif_opener()` (already used in both
@@ -211,28 +345,38 @@ face-heuristic's OpenCV limitation (15/49 failed) — Python's `PIL` +
 `pillow-heif` simply doesn't share those gaps. No server-side HEIC
 conversion needs to be added.
 
-## 6. Smallest production slice (proposed sequence, not built)
+## 8. Smallest production slice (proposed sequence, not built)
 
-1. Migration: add the five columns above to `Photo`.
-2. `apps/api`: after `/complete`, schedule a `BackgroundTask` that reads
-   the original from R2 (server already holds R2 credentials; no new
-   access pattern), runs the metadata heuristic (port `isLikelyScreenshot`'s
-   inputs, already computable from stored `content_type`/EXIF) + SigLIP2
-   inference, combines via a Python port of `hybridScreenshotDecision` for
-   screenshot, uses the SigLIP2 label directly for selfie, writes the
-   result columns.
-3. Expose the signals on the existing photo read paths (participant's own
-   list today; host gallery once it exists) as suggest-only data — same
-   posture as every other cleanup signal: flagged, never auto-excluded.
-4. **Deliberately not built in this slice:** the actual UI where a
-   participant reviews these post-upload suggestions and confirms what
-   becomes "shared" (`uploaded privately != shared` — that boundary
-   doesn't exist anywhere in the schema yet; today everything private
-   simply has no shared state at all). That's a real, separate UX/UI
-   design decision, explicitly deferred per direction ("let's do the
-   UX/UI later").
+1. Write ADR 010 (see §5) — supersedes 008, amends 009's album query.
+   Decide and record the backfill question (existing uploads get
+   `shared_at = uploaded_at`) as part of it, not as an afterthought.
+2. Migration: add `shared_at` + the five classification columns to
+   `Photo`. Backfill `shared_at` for existing `uploaded_private` rows per
+   ADR 010's decision.
+3. `apps/api`: `album.py`'s `list_album`/`original` queries add
+   `Photo.shared_at IS NOT NULL` alongside the existing status check.
+4. Stand up the single-instance classification process (§7); `apps/api`
+   schedules a `BackgroundTask` after `/complete` that calls it, writes
+   the five result columns + `classified_at`.
+5. New endpoint/action: participant confirms Share for their reviewed
+   selection → sets `shared_at = now()` on the confirmed (non-excluded)
+   photos. This is the one truly new piece of product surface — nothing
+   like it exists today (upload and share were the same action until this
+   correction).
+6. Review UI: shows blur/duplicate immediately, polls/waits up to ~8s for
+   `classified_at`, shows Selfie/Screenshot/Possibly blurry/Possible
+   duplicate as independent, explainable groups per §6 of the original
+   selfie/screenshot design; each flagged thumbnail gets an inspect +
+   exclude toggle before Share, and remains toggleable after Share too
+   (un-setting `shared_at`).
+7. Replace `"Stored privately · Unreviewed"` (`intake-panel.tsx`) — it
+   names the internal storage state directly, exactly the pattern this
+   correction rules out. Not just a string swap: the section's actual
+   meaning changes under this model, from "list of confirmed uploads" to
+   "what's in Review vs. what's Shared." Target copy to design against in
+   the later UX pass, not fixed inline here.
 
-## 7. Tests
+## 9. Tests
 
 Written and passing now (62/62 in `apps/web`, evaluation-layer only, no
 production path touched):
@@ -242,23 +386,29 @@ production path touched):
 - Existing `isLikelyScreenshot`/blur/duplicate/suggestions tests untouched
   and still passing.
 
-Not yet written (blocked on the actual `apps/api` implementation, which
-doesn't exist yet): Python unit tests for the ported hybrid decision and
-the classification `BackgroundTask` — that's Codex's build once this
-proposal is approved.
+Not yet written (blocked on the `apps/api`/migration work above, which
+doesn't exist yet — Codex's build once ADR 010 and this proposal are
+approved): Python unit tests for the ported hybrid decision, the
+classification process, the album query's new `shared_at` condition, and
+the new confirm-Share endpoint (including: nothing becomes visible without
+it, existing-upload backfill is correct, late-arriving classification
+after Share still attaches and remains toggleable).
 
-## 8. What's intentionally deferred
+## 10. What's intentionally deferred
 
 - Wiring any of this into `apps/api` or the live intake/upload flow.
-- The migration and the five new columns.
-- The post-upload "review and confirm what's shared" UI — real, needed,
-  explicitly UX/UI work deferred per direction.
-- Growing the labeled set beyond n=49 (still real, unfinished work).
-- A separate inference microservice, Redis/Celery/Upstash, a vector DB —
-  none justified by the numbers measured here.
-- Server-side `content_hash`/duplicate storage — unrelated to this
-  proposal, already deferred elsewhere.
+- ADR 010 itself, the migration, and all six new columns.
+- The confirm-Share endpoint and the Review-screen UI.
+- Growing the labeled set beyond n=49 (still real, unfinished work) — see
+  the frozen-prompt safeguard in §1.
+- A separate inference microservice beyond the one single-instance process
+  proposed in §7, Redis/Celery/Upstash, a vector DB — none justified by
+  the numbers measured here.
+- Cross-participant duplicate detection / server-side `content_hash`
+  storage — considered and explicitly scoped back out in §4; stays
+  deferred where `docs/STATUS.md` already had it.
 - Album smart-filter labels (people/food/scenery/candid) — a different
   system with a different purpose; not touched or conflated with these
   cleanup signals.
 - Blur threshold changes — none made; existing real numbers stand.
+- Bulk download — separate request, not part of this slice.

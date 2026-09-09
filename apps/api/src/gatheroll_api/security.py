@@ -1,7 +1,9 @@
 import hashlib
 import re
 import secrets
+from dataclasses import dataclass
 from typing import Annotated
+from uuid import UUID
 
 from fastapi import Depends, HTTPException
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
@@ -9,6 +11,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from gatheroll_api.database import get_session
+from gatheroll_api.domain import ParticipantStatus
 from gatheroll_api.models import Event, Participant
 
 SessionDep = Annotated[Session, Depends(get_session)]
@@ -80,3 +83,35 @@ def require_participant(
 
 HostDep = Annotated[Event, Depends(require_host)]
 ParticipantDep = Annotated[Participant, Depends(require_participant)]
+
+
+@dataclass
+class AlbumAccess:
+    event: Event
+    # The requester's own participant identity, for filters like "not mine" --
+    # never exposed in a response body. None for a host with no claimed
+    # participant identity yet (nothing to exclude in that case).
+    participant_id: UUID | None
+
+
+def require_album_access(
+    event: EventDep, token: TokenDep, session: SessionDep
+) -> AlbumAccess:
+    if event.manage_token_hash is not None and secrets.compare_digest(
+        event.manage_token_hash, hash_token(token)
+    ):
+        host_participant = session.scalar(
+            select(Participant).where(
+                Participant.event_id == event.id, Participant.is_host.is_(True)
+            )
+        )
+        return AlbumAccess(
+            event=event,
+            participant_id=host_participant.id if host_participant else None,
+        )
+    participant = require_participant(event, token, session)
+    if participant.status != ParticipantStatus.APPROVED:
+        raise api_error(
+            403, "approval_required", "Join approval is required to view photos."
+        )
+    return AlbumAccess(event=event, participant_id=participant.id)

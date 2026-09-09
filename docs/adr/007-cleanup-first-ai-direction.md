@@ -1,5 +1,11 @@
 # ADR 007: Trust participant selection as event relevance; move AI to cleanup, organization, and download
 
+> **Product correction (2026-09-08, ADR 008):** uploading selected photos is the
+> sharing action for the event; no separate post-upload sharing confirmation is
+> required. Earlier private-staging/confirmation language below is superseded.
+> The shared album now serves the host and every approved participant (ADR 009).
+> See [ADR 008](../adr/008-upload-is-event-sharing.md).
+
 Status: Accepted — 2026-09-08. Supersedes the event-relevance-as-primary-AI-target
 framing in [ADR 005](005-event-boundaries-are-not-membership.md) and the visual/
 context relevance hypothesis in

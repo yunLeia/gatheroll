@@ -42,11 +42,13 @@ export function IntakePanel({
   token,
   participant,
   onPreferencesUpdated,
+  onUploaded,
 }: {
   share: string;
   token: string;
   participant: Participant;
   onPreferencesUpdated: (participant: Participant) => void;
+  onUploaded: () => void;
 }) {
   const service = useMemo(() => photoApi(share, token), [share, token]);
   const picker = useRef<HTMLInputElement>(null);
@@ -274,6 +276,7 @@ export function IntakePanel({
         },
       );
       if (controller.signal.aborted) return;
+      if (jobsRef.current.some((job) => job.state === "uploaded")) onUploaded();
       recordDiagnostic("upload_batch", {
         count: jobsRef.current.length,
         retry_count: retryCount,
@@ -371,9 +374,9 @@ export function IntakePanel({
   return (
     <div className="mt-6 min-w-0 space-y-6">
       <p className="text-sm text-muted-foreground">
-        Select photos from around the event. Originals and available location
-        metadata are uploaded privately. Nothing is shared with your host or
-        other participants.
+        Choose photos to share with this event. Uploading makes them available
+        to the host and all approved participants, including original downloads.
+        Original files may include location metadata.
       </p>
       <input
         ref={picker}
@@ -426,7 +429,7 @@ export function IntakePanel({
         <section className="space-y-3" aria-label="Selected photos">
           <p role="status">
             {uploaded > 0
-              ? `${uploaded} / ${jobs.length} stored privately`
+              ? `${uploaded} / ${jobs.length} shared with the event`
               : `${jobs.length} ${jobs.length === 1 ? "photo" : "photos"} selected`}
             {failed > 0 ? ` · ${failed} failed` : ""}
           </p>
@@ -463,7 +466,7 @@ export function IntakePanel({
                     {job.input.original_filename}
                   </p>
                   <p className="px-2 py-1 text-xs">
-                    {job.state === "uploaded" ? "Stored privately" : job.state}
+                    {job.state === "uploaded" ? "Shared" : job.state}
                   </p>
                   {job.state !== "uploaded" && flags.length > 0 && (
                     <p className="px-2 pb-1 text-xs text-caution">
@@ -510,7 +513,7 @@ export function IntakePanel({
                   ? "Working…"
                   : failed === selected
                     ? `Retry ${failed}`
-                    : `Upload ${selected} privately`}
+                    : `Upload and share ${selected}`}
               </Button>
             </div>
           )}
@@ -529,7 +532,7 @@ export function IntakePanel({
           {nextOffset !== null ? "+" : ""}
         </h3>
         <p className="text-sm text-muted-foreground">
-          Stored privately · Unreviewed
+          Shared with the event
         </p>
         {!listLoaded && !error && (
           <p role="status" className="text-sm text-muted-foreground">

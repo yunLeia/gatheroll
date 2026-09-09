@@ -44,6 +44,7 @@ export type PhotoLimits = {
 export type StoredPhoto = {
   id: string;
   original_filename: string;
+  content_type: string;
   file_size_bytes: number;
   status: "uploaded_private";
   preview_url: string | null;
